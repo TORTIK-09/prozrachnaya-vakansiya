@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-24T18:18:49+02:00",
+  "generated_at": "2026-11-24T20:48:49+02:00",
   "mode": "file",
   "source": "sample_vacancies.json",
   "model": {
@@ -11,7 +11,7 @@
     "input": 10,
     "vacancies": 10,
     "with_findings": 6,
-    "findings": 18,
+    "findings": 17,
     "skipped_no_id": 0,
     "duplicates": 0,
     "from_cache": 0,
@@ -120,15 +120,6 @@
             "field": "requirement.qualification",
             "quote": "не менее 5 лет опыта работы"
           },
-          "source": "rule"
-        },
-        {
-          "topic": "schedule",
-          "kind": "ambiguous",
-          "field": "schedule",
-          "quote": "Полный рабочий день",
-          "problem": "Указан только общий режим работы: рабочие дни и часы не названы ни в одном поле.",
-          "recommendation": "Уточните у работодателя рабочие дни недели и время начала и окончания работы.",
           "source": "rule"
         },
         {
@@ -318,7 +309,7 @@
           "recommendation": "Уточните у работодателя, какой режим действует на самом деле: фиксированные дни и часы или гибкий график, и по каким правилам.",
           "conflict_with": {
             "field": "requirement.qualification",
-            "quote": "Пятидневная рабочая неделя"
+            "quote": "Пятидневная рабочая неделя с 09:00 до 18:00"
           },
           "source": "rule"
         }

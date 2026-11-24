@@ -183,6 +183,25 @@ def cmd_calibrate(cfg: config_mod.Config) -> int:
     return 0
 
 
+def cmd_learn(cfg: config_mod.Config, count: int) -> int:
+    """Пересчитать нормы опыта по должностям на свежих вакансиях портала (pv/analyze/norms.py)."""
+    from dataclasses import replace as _replace
+
+    from .analyze import norms
+    from .normalize import normalize
+    try:
+        raw = source.fetch_api(_replace(cfg, max_vacancies=count), log=log)
+    except source.SourceError as e:
+        log(f"ОШИБКА: {e}")
+        return 2
+    table = norms.build(v for v in map(normalize, raw) if v)
+    path = norms.local_path(cfg.reports)
+    report.write_json(path, table)
+    norms.forget()
+    log(f"нормы опыта: {len(table['groups'])} групп должностей по {table['vacancies']} вакансиям; файл: {path}")
+    return 0
+
+
 def cmd_resume(cfg: config_mod.Config, resume_id: str, vacancy_id: str, report_path: str, out: str | None) -> int:
     """Свой сценарий: черновик резюме под вакансию из готового отчёта."""
     import json
@@ -225,6 +244,8 @@ def main(argv: list[str] | None = None) -> int:
     p_web = sub.add_parser("web", help="веб-панель для просмотра отчёта")
     p_web.add_argument("--port", type=int, help="порт (иначе из настроек, по умолчанию 8085)")
     sub.add_parser("calibrate", help="настроить подключённую модель под задачу и сравнить её с правилами")
+    p_learn = sub.add_parser("learn", help="пересчитать нормы опыта по должностям на вакансиях портала")
+    p_learn.add_argument("--count", type=int, default=400, help="сколько вакансий взять (по умолчанию 400)")
     p_res = sub.add_parser("resume", help="свой сценарий: черновик резюме под вакансию из отчёта")
     p_res.add_argument("--resume", default="RES-01", help="ID резюме из examples/sample_resumes.json")
     p_res.add_argument("--vacancy", required=True, help="ID вакансии из отчёта")
@@ -253,6 +274,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_web(cfg, a.port)
     if a.cmd == "calibrate":
         return cmd_calibrate(cfg)
+    if a.cmd == "learn":
+        return cmd_learn(cfg, a.count)
     if a.cmd == "resume":
         return cmd_resume(cfg, a.resume, a.vacancy, a.report, a.out)
     return cmd_schedule(cfg, not a.no_llm)

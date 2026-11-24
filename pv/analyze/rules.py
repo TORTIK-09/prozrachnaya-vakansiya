@@ -9,6 +9,7 @@ import re
 from typing import Iterable
 
 from ..models import Evidence, Finding, Vacancy
+from . import norms
 
 I = re.IGNORECASE
 
@@ -57,9 +58,21 @@ EXP_YEARS = re.compile(
     r"стаж\w*(?:\s+работы)?\s*(?:[-–—:]\s*)?(?:не\s+менее\s+|от\s+)?(\d{1,2})\s*(?:лет|года|год)\w*", I)
 EXP_REQUIRED = re.compile(
     r"(?:обязателен\s+|требуется\s+|необходим\s+)?опыт\w*\s+(?:работы|разработки|ведения|управления|проведения|"
-    r"составления|продаж|руководства|вождения|преподавания)(?:\s+[\w-]+){0,2}", I)
+    r"составления|продаж|руководства|вождения|преподавания)(?:\s+[\w-]+){0,2}|"
+    r"(?:требовани\w+\s+к\s+)?стаж\w*\s+(?:работы|муниципальн\w+|государственн\w+|по\s+специальности)(?:\s+[\w-]+){0,2}", I)
 # оговорки, при которых упоминание опыта не делает его обязательным
 EXP_OPTIONAL = re.compile(r"\bбез\b|\bне\b|\bнет\b|приветству\w+|желател\w+|плюс\w*|преимуществ\w+|\bили\b|\bлибо\b", I)
+# Признаки того, что опыт действительно не нужен: сказано прямо либо должность начальная и учат на месте
+EXP_NOT_NEEDED = re.compile(
+    r"без\s+опыта|опыт\w*(?:\s+работы)?\s+не\s+(?:требуется|обязателен|нужен|имеет\s+значения)|не\s+требу\w+\s+опыт\w*|"
+    r"обучени\w+|обучаем|научим|стажировк\w+|наставник\w*|без\s+предъявления\s+требований|"
+    r"требовани\w+\s+к\s+(?:стажу|опыту)[^.;]*не\s+предъявля\w+", I)
+# прямое «опыт не нужен» где угодно в требованиях снимает и упоминание опыта рядом
+EXP_WAIVED = re.compile(r"без\s+опыта|нет\s+опыта|научим|опыт\w*(?:\s+работы)?\s+не\s+(?:требуется|обязателен|нужен|имеет\s+значения)", I)
+PAY_WORDS = re.compile(r"доплат\w*|надбавк\w*|выплат\w*|преми\w+|компенсаци\w+|\bза\s+стаж", I)
+JUNIOR_TITLE = re.compile(r"стаж[её]р|ученик|младш\w+|помощник|подсобн\w+|разнорабоч\w+|начинающ\w+", I)
+SENIOR_TITLE = re.compile(r"ведущ\w+|главн\w+|старш\w+|руководител\w+|начальник\w*|заведующ\w+|директор\w*|"
+                          r"заместител\w+|управляющ\w+", I)
 NO_EXP = re.compile(r"без\s+опыта(?:\s+работы)?|опыт\w*(?:\s+работы)?\s+не\s+(?:требуется|обязателен|нужен)", I)
 
 HARD_SKILL = re.compile(
@@ -152,6 +165,32 @@ def _duties(v: Vacancy) -> list[Finding]:
                     "Уточните у работодателя перечень конкретных регулярных задач по этой должности.")]
 
 
+def _zero_experience(v: Vacancy) -> list[Finding]:
+    """Опыт 0 и в тексте про опыт ничего: это «опыт не нужен» или поле забыли заполнить?
+
+    Считаем, что опыт действительно не нужен, если так сказано в любом поле или должность начальная.
+    Вопрос работодателю задаём в двух случаях: должность руководящая или старшая; либо на портале в этой
+    профессии опыт требуют почти всегда (norms.py). В остальных случаях ноль принимаем как есть.
+    """
+    texts = " ".join(v.text_of(f) for f in (*REQ_FIELDS, "duty"))
+    if EXP_NOT_NEEDED.search(norm(texts)) or JUNIOR_TITLE.search(norm(v.title or "")):
+        return []
+    senior = search(SENIOR_TITLE, v.title or "")
+    if senior:
+        return [Finding("requirements", "ambiguous", "requirement.experience", "0",
+                        f"В поле опыта указано 0, хотя должность «{v.title}» старшая или руководящая, а в тексте вакансии "
+                        "про опыт ничего не сказано: непонятно, рассматривают ли кандидатов без опыта.",
+                        "Уточните у работодателя, рассматриваются ли кандидаты без опыта работы; если нет — какой стаж нужен.")]
+    usual = norms.usually_needs_experience(v.title)
+    if usual:
+        with_exp, total = usual
+        return [Finding("requirements", "ambiguous", "requirement.experience", "0",
+                        f"В поле опыта указано 0, и в тексте про опыт ничего не сказано. При этом в похожих вакансиях портала "
+                        f"опыт требуется в {with_exp} из {total}: возможно, поле не заполнили.",
+                        "Уточните у работодателя, действительно ли рассматриваются кандидаты без опыта работы.")]
+    return []
+
+
 def _requirements(v: Vacancy) -> list[Finding]:
     out: list[Finding] = []
     texts = [v.text_of(f) for f in REQ_FIELDS]
@@ -178,13 +217,19 @@ def _requirements(v: Vacancy) -> list[Finding]:
             t = v.text_of(f)
             hit = search(EXP_REQUIRED, t)
             # оговорки «без опыта», «не обязателен», «приветствуется» в том же предложении снимают противоречие
-            if hit and not EXP_OPTIONAL.search(norm(_sentence(t, hit))):
+            # ...а «доплата за стаж» — это льгота, не требование; «нет опыта — научим» снимает вопрос целиком
+            sentence = norm(_sentence(t, hit)) if hit else ""
+            if hit and (PAY_WORDS.search(sentence) or EXP_WAIVED.search(norm(" ".join(texts)))):
+                continue
+            if hit and not EXP_OPTIONAL.search(sentence):
                 out.append(Finding(
                     "requirements", "contradiction", "requirement.experience", "0",
                     "В поле опыта указано 0, то есть опыт не нужен, а в тексте требований упомянут опыт без оговорки, что он необязателен.",
                     "Уточните у работодателя, обязателен ли опыт работы; если да — какой минимальный стаж нужен.",
                     conflict_with=Evidence(f, hit)))
                 break
+        else:
+            out.extend(_zero_experience(v))
     elif exp is not None and exp >= 1:
         hit = _first(v, REQ_FIELDS, NO_EXP)
         if hit:

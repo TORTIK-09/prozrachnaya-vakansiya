@@ -251,3 +251,38 @@ def test_portal_dictionary_schedules():
     part = "Неполный рабочий день/неполная рабочая неделя"
     assert ("schedule", "ambiguous") in kinds(vac(schedule=part, employment="Частичная занятость"))
     assert ("employment", "contradiction") in kinds(vac(schedule=part + ", 10:00–14:00"))
+
+
+def test_zero_experience_real_or_forgotten():
+    def exp0(**kw):
+        return [(f.kind, f.problem) for f in rules.check(vac(requirement={"education": "Высшее", "experience": 0}, **kw))
+                if f.field == "requirement.experience"]
+
+    # обычная должность, про опыт ничего: ноль принимается как есть
+    assert exp0() == []
+    # сказано прямо или должность начальная — опыт действительно не нужен
+    for kw in ({"requirements": "Знание учёта. Можно без опыта, всему обучим."}, {"qualification": "Без опыта"},
+               {"job-name": "Помощник бухгалтера"}, {"job-name": "Стажёр отдела закупок"},
+               {"job-name": "Главный специалист", "requirements": "Требования к стажу не предъявляются."}):
+        assert exp0(**kw) == [], kw
+    # руководящая должность без единого слова про опыт — вопрос работодателю
+    senior = exp0(**{"job-name": "Начальник отдела закупок"})
+    assert [k for k, _ in senior] == ["ambiguous"] and "руководящая" in senior[0][1]
+    # профессия, где на портале опыт требуют почти всегда (норма выучена на вакансиях)
+    learned = exp0(**{"job-name": "Повар"})
+    assert [k for k, _ in learned] == ["ambiguous"] and "похожих вакансиях портала" in learned[0][1]
+    assert exp0(**{"job-name": "Повар", "requirements": "Опыт не требуется."}) == []
+    assert exp0(**{"job-name": "Уборщик помещений"}) == []
+    # льгота за стаж — не требование стажа; требование стажа без оговорки — противоречие
+    assert exp0(requirements="Знание учёта. Доплата за стаж работы на предприятии.") == []
+    assert [k for k, _ in exp0(requirements="Стаж работы по специальности.")] == ["contradiction"]
+
+
+def test_experience_norms_are_learned_from_vacancies():
+    from pv.analyze import norms
+    vs = [vac(**{"id": f"p{i}", "job-name": "Пекарь", "requirement": {"experience": 1 if i < 9 else 0}}) for i in range(10)]
+    vs += [vac(**{"id": f"d{i}", "job-name": "Дворник", "requirement": {"experience": 0}}) for i in range(12)]
+    vs += [vac(**{"id": "r", "job-name": "Редкая должность", "requirement": {"experience": 3}})]
+    table = norms.build(vs)
+    assert table["groups"] == {"дворн": [12, 0], "пекар": [10, 9]} and table["vacancies"] == 23
+    assert norms.key("ПОВАРА горячего цеха") == norms.key("повар") == "повар"
