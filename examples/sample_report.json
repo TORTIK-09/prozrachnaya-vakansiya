@@ -1,11 +1,12 @@
 {
-  "generated_at": "2026-11-24T21:35:09+02:00",
+  "generated_at": "2026-11-24T23:59:22+02:00",
   "mode": "file",
   "source": "sample_vacancies.json",
   "model": {
     "provider": "ollama",
     "model": "qwen2.5:3b",
-    "used": true
+    "used": true,
+    "calibrated": true
   },
   "stats": {
     "input": 10,
