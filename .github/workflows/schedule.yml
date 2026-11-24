@@ -1,0 +1,47 @@
+# Рабочий режим по расписанию: загрузка вакансий из API и сборка отчёта.
+# Тот же процесс запускается вручную кнопкой «Run workflow» или командой `uv run python -m pv run`.
+name: Отчёт по расписанию
+
+on:
+  schedule:
+    - cron: "0 4 * * *"   # каждый день в 04:00 UTC = 06:00 по Калининграду; GitHub требует писать расписание здесь
+  workflow_dispatch:
+    inputs:
+      max_vacancies:
+        description: "Максимум вакансий"
+        default: "200"
+
+permissions:
+  contents: read
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      PV_MAX_VACANCIES: ${{ inputs.max_vacancies || vars.PV_MAX_VACANCIES || '200' }}
+      PV_SOURCE_URL: ${{ vars.PV_SOURCE_URL || 'http://opendata.trudvsem.ru/api/v1/vacancies/region/39' }}
+      PV_LLM_BASE_URL: ${{ vars.PV_LLM_BASE_URL }}
+      PV_LLM_MODEL: ${{ vars.PV_LLM_MODEL }}
+      PV_LLM_API_KEY: ${{ secrets.PV_LLM_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --no-dev
+      # прошлый отчёт и кэш: при сбое API последний успешный отчёт остаётся, неизменившиеся вакансии не считаются заново
+      - uses: actions/cache@v4
+        with:
+          path: reports
+          key: reports-${{ github.run_id }}
+          restore-keys: reports-
+      - name: Сборка отчёта
+        run: uv run --no-dev python -m pv run
+      - name: Сохранить отчёт
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: report
+          path: |
+            reports/latest.json
+            reports/last_error.json
+          if-no-files-found: warn

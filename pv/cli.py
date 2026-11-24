@@ -1,0 +1,168 @@
+"""Команды: run (рабочий режим), check (проверочный режим), schedule (по расписанию).
+
+Обработка начинается здесь: `python -m pv ...` → main().
+"""
+from __future__ import annotations
+
+import argparse
+import sys
+import time
+from dataclasses import replace
+from datetime import datetime
+from pathlib import Path
+
+from . import config as config_mod
+from . import cron, report, source
+from .models import LLM
+
+
+def log(msg: str) -> None:
+    print(f"[{datetime.now():%H:%M:%S}] {msg}", file=sys.stderr, flush=True)
+
+
+def get_analyzer():
+    """Анализатор и его версия. Версия входит в отпечаток кэша: сменился анализатор — считаем заново."""
+    from . import analyze as mod
+    return mod.analyze, str(getattr(mod, "VERSION", "0"))
+
+
+def make_llm(cfg: config_mod.Config, enabled: bool) -> LLM | None:
+    """Клиент модели из настроек. Нет модуля, настроек или связи — работаем на одних правилах и говорим об этом."""
+    if not enabled:
+        log("модель отключена флагом --no-llm: работают только правила")
+        return None
+    try:
+        from . import llm as llm_mod
+    except ImportError:
+        log("клиент модели (pv/llm.py) ещё не подключён: работают только правила")
+        return None
+    try:
+        client = llm_mod.from_config(cfg)
+    except Exception as e:
+        log(f"модель недоступна ({type(e).__name__}: {e}): работают только правила")
+        return None
+    if client is None:
+        log("модель не настроена: работают только правила")
+    return client
+
+
+def _salt(version: str, llm: LLM | None) -> str:
+    if llm is None:
+        return f"{version}|no-llm"
+    try:
+        info = llm.describe() or {}
+    except Exception:
+        info = {}
+    return f"{version}|{info.get('provider')}|{info.get('model')}"
+
+
+def _summary(rep: dict, path: Path) -> None:
+    s = rep["stats"]
+    log(f"вакансий: {s['vacancies']}, с замечаниями: {s['with_findings']}, замечаний: {s['findings']}"
+        + (f", из кэша: {s['from_cache']}" if s["from_cache"] else "")
+        + (f", отброшено замечаний: {s['rejected_findings']}" if s["rejected_findings"] else "")
+        + (f", сбоев анализатора: {s['analyzer_errors']}" if s["analyzer_errors"] else ""))
+    log(f"отчёт: {path}")
+
+
+def cmd_run(cfg: config_mod.Config, use_llm: bool = True) -> int:
+    """Рабочий режим: API → анализ → reports/latest.json. Этот же код запускает расписание."""
+    log(f"источник: {cfg.source_url}, не больше {cfg.max_vacancies} вакансий")
+    try:
+        raw = source.fetch_api(cfg, log=log)
+    except source.SourceError as e:
+        path = report.save_error(str(e), cfg.source_url, cfg.reports)
+        latest = cfg.reports / "latest.json"
+        log(f"ОШИБКА: {e}")
+        log(f"последний успешный отчёт сохранён: {latest}" if latest.is_file() else "успешных отчётов ещё не было")
+        log(f"сведения об ошибке: {path}")
+        return 2
+    if not raw:
+        path = report.save_error("Источник вернул пустой список вакансий", cfg.source_url, cfg.reports)
+        log(f"ОШИБКА: источник вернул пустой список вакансий; прежний отчёт не тронут; сведения: {path}")
+        return 2
+    analyze, version = get_analyzer()
+    llm = make_llm(cfg, use_llm)
+    cache = report.Cache(cfg.reports / "cache.json")
+    entries, stats = report.analyze_all(raw, analyze, llm, cfg.workers, cache, _salt(version, llm), log)
+    rep = report.build(entries, stats, "api", cfg.source_url, llm)
+    _summary(rep, report.save_latest(rep, cfg.reports))
+    return 0
+
+
+def cmd_check(cfg: config_mod.Config, file: str, out: str, use_llm: bool = True, use_cache: bool = False) -> int:
+    """Проверочный режим: локальный JSON → отчёт по всем переданным вакансиям. В сеть за вакансиями не ходит."""
+    try:
+        raw = source.load_file(file)
+    except source.SourceError as e:
+        log(f"ОШИБКА: {e}")
+        return 2
+    analyze, version = get_analyzer()
+    llm = make_llm(cfg, use_llm)
+    cache = report.Cache(cfg.reports / "cache-check.json") if use_cache else None
+    entries, stats = report.analyze_all(raw, analyze, llm, cfg.workers, cache, _salt(version, llm), log)
+    rep = report.build(entries, stats, "file", Path(file).name, llm)
+    out_path = Path(out)
+    report.write_json(out_path, rep)
+    _summary(rep, out_path)
+    return 0
+
+
+def cmd_schedule(cfg: config_mod.Config, use_llm: bool = True) -> int:
+    """Работает постоянно и запускает рабочий режим по cron-выражению из настроек."""
+    try:
+        cron.parse(cfg.schedule)
+    except ValueError as e:
+        log(f"ОШИБКА в расписании «{cfg.schedule}»: {e}")
+        return 2
+    log(f"расписание: {cfg.schedule} (остановить — Ctrl+C)")
+    try:
+        while True:
+            nxt = cron.next_run(cfg.schedule, datetime.now())
+            log(f"следующий запуск: {nxt:%d.%m.%Y %H:%M}")
+            while datetime.now() < nxt:
+                time.sleep(min(30.0, max(0.5, (nxt - datetime.now()).total_seconds())))
+            try:
+                cmd_run(cfg, use_llm)
+            except Exception as e:   # расписание переживает сбой отдельного запуска
+                log(f"ОШИБКА запуска: {type(e).__name__}: {e}")
+    except KeyboardInterrupt:
+        log("остановлено")
+        return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+    ap = argparse.ArgumentParser(prog="python -m pv", description="Отчёт о понятности вакансий «Работа в России»")
+    ap.add_argument("--config", help="путь к config.toml (по умолчанию — в корне проекта)")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    p_run = sub.add_parser("run", help="рабочий режим: загрузить вакансии из API и записать отчёт")
+    p_run.add_argument("--max", type=int, dest="max_vacancies", help="максимум вакансий (иначе из настроек)")
+    p_run.add_argument("--url", dest="source_url", help="URL источника (иначе из настроек)")
+    p_check = sub.add_parser("check", help="проверочный режим: отчёт по локальному JSON")
+    p_check.add_argument("file", help="JSON в формате ответа API")
+    p_check.add_argument("--out", default="reports/check.json", help="куда записать отчёт")
+    p_check.add_argument("--cache", action="store_true", help="не анализировать заново неизменившиеся вакансии")
+    p_sched = sub.add_parser("schedule", help="работать постоянно и запускать рабочий режим по расписанию")
+    for p in (p_run, p_check, p_sched):
+        p.add_argument("--no-llm", action="store_true", help="не обращаться к модели, только правила")
+    a = ap.parse_args(argv)
+
+    try:
+        cfg = config_mod.load(a.config)
+        over = {k: getattr(a, k) for k in ("max_vacancies", "source_url") if getattr(a, k, None) is not None}
+        if over:
+            cfg = replace(cfg, **over)
+            if cfg.max_vacancies < 1:
+                raise ValueError("--max должно быть не меньше 1")
+    except (ValueError, FileNotFoundError) as e:
+        log(f"ОШИБКА настроек: {e}")
+        return 2
+
+    if a.cmd == "run":
+        return cmd_run(cfg, not a.no_llm)
+    if a.cmd == "check":
+        return cmd_check(cfg, a.file, a.out, not a.no_llm, a.cache)
+    return cmd_schedule(cfg, not a.no_llm)

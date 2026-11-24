@@ -1,0 +1,15 @@
+# Скопируйте в config.toml и измените нужное. Любую настройку можно переопределить
+# переменной окружения с приставкой PV_ (например, PV_MAX_VACANCIES=500).
+# Ключи сюда не пишите: для них есть файл .env (см. .env.example).
+
+source_url = "http://opendata.trudvsem.ru/api/v1/vacancies/region/39"
+schedule = "0 6 * * *"     # cron: минута час день_месяца месяц день_недели — каждый день в 06:00
+max_vacancies = 200
+workers = 4                # потоков анализа
+timeout = 60               # секунд на один запрос к API
+retries = 3
+reports_dir = "reports"
+
+# Модель: значения по умолчанию задаёт клиент модели (pv/llm.py)
+# llm_base_url = ""
+# llm_model = ""
