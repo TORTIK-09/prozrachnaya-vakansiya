@@ -239,3 +239,13 @@ mark.active { outline: 2px solid var(--accent); }
 .finding.dismissed .quote, .finding.dismissed .rec { display: none; }
 .rule-says { margin: 6px 0 0; font-size: 13.5px; } .rule-says summary { font-size: 12.5px; }
 .rule-says div { margin-top: 4px; }
+
+/* метки «правило» и «ИИ»: до решения ничего не зачёркнуто */
+.who i.idle { color: var(--ink-3); background: none; }
+.who i.on.ai { background: var(--accent); border-color: var(--accent); color: #fff; }
+.who i.on.chosen { background: var(--ok); border-color: var(--ok); color: #fff; }
+.who i.on.chosen::before { content: "✓ "; }
+.who i.off.ai, .who i.idle.ai { background: none; }
+.accepted { animation: gone .6s ease 2.6s forwards; }
+@keyframes gone { to { opacity: 0; transform: translateY(-3px); } }
+@media (prefers-reduced-motion: reduce) { .accepted { animation: gone .01s linear 2.6s forwards; } }

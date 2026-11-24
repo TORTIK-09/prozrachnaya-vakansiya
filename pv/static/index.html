@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Прозрачная вакансия</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23173a3a'/%3E%3Ccircle cx='14' cy='14' r='6.5' fill='none' stroke='%23f2b441' stroke-width='2.6'/%3E%3Cpath d='m19 19 6 6' stroke='%23f4efe4' stroke-width='2.8' stroke-linecap='round'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="/static/app.css?v=7">
+<link rel="stylesheet" href="/static/app.css?v=8">
 </head>
 <body>
 <header class="top">
@@ -218,8 +218,9 @@ function verdictBar(v, f) {
   async function choose(choice) {
     try {
       await api("/api/verdict?vacancy_id=" + encodeURIComponent(v.id) + "&topic=" + f.topic + "&kind=" + f.kind + "&choice=" + choice + "&source=" + f.source, {method: "POST"});
-      if (choice === "none") delete f.verdict; else f.verdict = choice;
+      if (choice === "none") { delete f.verdict; delete f._fresh; } else { f.verdict = choice; f._fresh = true; }
       renderSummary(); renderList(); renderDetail();
+      delete f._fresh;          // зелёная пометка показывается один раз — сразу после выбора — и сама гаснет
     } catch (e) { banner(e.message); }
   }
   if (f.verdict) return el("div", {class: "verdict"}, el("span", {text: dismissed(f) ? "Замечание снято: принято, что проблемы нет." : "Замечание подтверждено."}), el("button", {class: "copy", onclick: () => choose("none"), text: "изменить решение"}));
@@ -233,8 +234,11 @@ function whoSees(f) {
   const m = S.report && S.report.model, ai = m && m.used && m.calibrated;
   const rule = f.source !== "llm", llm = f.source === "llm" || f.source === "both";
   if (!ai && !llm) return el("span", {class: "who"}, el("i", {class: "on", title: "Проблему нашло правило. ИИ эту вакансию не проверял", text: "правило"}));
-  return el("span", {class: "who", title: rule && llm ? "Проблему видят и правило, и ИИ. Формулировка — от ИИ" : rule ? "Проблему видит правило, ИИ её не отметил" : "Проблему отметил только ИИ, правило её не видит"},
-    el("i", {class: rule ? "on" : "off", text: "правило"}), el("i", {class: llm ? "on ai" : "off", text: "ИИ"}));
+  // до решения человека ничего не зачёркнуто: горит тот, кто видит проблему; после — выбранный ответ отмечен, невыбранный зачёркнут
+  const cls = who => f.verdict ? (f.verdict === who ? "on chosen" : "off") : ((who === "rule" ? rule : llm) ? "on" : "idle");
+  const title = f.verdict ? (f.verdict === "llm" ? "Принят ответ ИИ" : "Принят ответ правила")
+    : rule && llm ? "Проблему видят и правило, и ИИ. Формулировка — от ИИ" : rule ? "Проблему видит правило, ИИ её не отметил" : "Проблему отметил только ИИ, правило её не видит";
+  return el("span", {class: "who", title}, el("i", {class: cls("rule"), text: "правило"}), el("i", {class: cls("llm") + " ai", text: "ИИ"}));
 }
 
 function auditView(v) {
@@ -258,7 +262,7 @@ function auditView(v) {
   const list = fs.length ? fs.map((f, i) => el("article", {class: "finding " + f.kind + (dismissed(f) ? " dismissed" : ""), "data-f": i, onmouseenter: () => document.querySelectorAll('mark[data-f="' + i + '"]').forEach(n => n.classList.add("active")), onmouseleave: () => document.querySelectorAll("mark.active").forEach(n => n.classList.remove("active"))},
       el("div", {class: "f-top"}, el("span", {class: "kind " + f.kind, text: KINDS[f.kind] || f.kind}), el("span", {class: "f-topic", text: TOPICS[f.topic] || f.topic}),
         disputed(f) && !f.verdict ? el("span", {class: "dispute", text: f.source === "llm" ? "(расхождение с ответом правил)" : "(расхождение с ответом ИИ)"}) : null,
-        f.verdict ? el("span", {class: "accepted", text: f.verdict === "llm" ? "(принят ответ ИИ)" : "(принят ответ правила)"}) : null,
+        f._fresh ? el("span", {class: "accepted", text: f.verdict === "llm" ? "(выбран ответ ИИ)" : "(выбран ответ правила)"}) : null,
         whoSees(f)),
       el("div", {text: f.problem}),
       f.rule_problem ? el("details", {class: "rule-says"}, el("summary", {text: "Что пишет правило"}), el("div", {text: f.rule_problem}), el("div", {class: "note", text: f.rule_recommendation})) : null,
