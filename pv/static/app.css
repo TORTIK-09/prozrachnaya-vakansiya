@@ -249,3 +249,6 @@ mark.active { outline: 2px solid var(--accent); }
 .accepted { animation: gone .6s ease 2.6s forwards; }
 @keyframes gone { to { opacity: 0; transform: translateY(-3px); } }
 @media (prefers-reduced-motion: reduce) { .accepted { animation: gone .01s linear 2.6s forwards; } }
+
+.kind.ok { background: var(--ok-bg); color: var(--ok); }
+.finding.dismissed { opacity: .75; border-left-color: var(--ok); }
