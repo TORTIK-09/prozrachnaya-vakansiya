@@ -58,8 +58,8 @@
   <section class="pane detail" id="detail"><div class="empty">Выберите вакансию слева</div></section>
 </main>
 
-<script src="/static/calib.js?v=3"></script>
-<script src="/static/live.js?v=4"></script>
+<script src="/static/calib.js?v=4"></script>
+<script src="/static/live.js?v=5"></script>
 <script>
 "use strict";
 const TOPICS = {title: "Название должности", duties: "Обязанности", requirements: "Требования", salary: "Оплата", schedule: "График", location: "Место работы", employment: "Тип занятости"};
@@ -253,12 +253,12 @@ function verdictBar(v, f) {
 function whoSees(f) {
   const m = S.report && S.report.model, ai = m && m.used && m.calibrated;
   const rule = f.source !== "llm", llm = f.source === "llm" || f.source === "both";
-  if (!ai && !llm) return el("span", {class: "who"}, el("i", {class: "on", title: "Проблему нашло правило. ИИ эту вакансию не проверял", text: "правило"}));
+  if (!ai && !llm) return el("span", {class: "who"}, el("i", {class: "on", title: "Проблему нашёл Системный AI. ИИ эту вакансию не проверял", text: "Системный AI"}));
   // до решения человека ничего не зачёркнуто: горит тот, кто видит проблему; после — выбранный ответ отмечен, невыбранный зачёркнут
   const cls = who => f.verdict ? (f.verdict === who ? "on chosen" : "off") : ((who === "rule" ? rule : llm) ? "on" : "idle");
-  const title = f.verdict ? (f.verdict === "llm" ? "Принят ответ ИИ" : "Принят ответ правила")
-    : rule && llm ? "Проблему видят и правило, и ИИ. Формулировка — от ИИ" : rule ? "Проблему видит правило, ИИ её не отметил" : "Проблему отметил только ИИ, правило её не видит";
-  return el("span", {class: "who", title}, el("i", {class: cls("rule"), text: "правило"}), el("i", {class: cls("llm") + " ai", text: "ИИ"}));
+  const title = f.verdict ? (f.verdict === "llm" ? "Принят ответ ИИ" : "Принят ответ Системного AI")
+    : rule && llm ? "Проблему видят и Системный AI, и ИИ. Формулировка — от ИИ" : rule ? "Проблему видит Системный AI, ИИ её не отметил" : "Проблему отметил только ИИ, Системный AI её не видит";
+  return el("span", {class: "who", title}, el("i", {class: cls("rule"), text: "Системный AI"}), el("i", {class: cls("llm") + " ai", text: "ИИ"}));
 }
 
 function auditView(v) {
@@ -281,11 +281,11 @@ function auditView(v) {
   }));
   const list = fs.length ? fs.map((f, i) => el("article", {class: "finding " + f.kind + (dismissed(f) ? " dismissed" : ""), "data-f": i, onmouseenter: () => document.querySelectorAll('mark[data-f="' + i + '"]').forEach(n => n.classList.add("active")), onmouseleave: () => document.querySelectorAll("mark.active").forEach(n => n.classList.remove("active"))},
       el("div", {class: "f-top"}, dismissed(f) ? el("span", {class: "kind ok", title: "Было: " + (KINDS[f.kind] || f.kind), text: "проблемы нет"}) : el("span", {class: "kind " + f.kind, text: KINDS[f.kind] || f.kind}), el("span", {class: "f-topic", text: TOPICS[f.topic] || f.topic}),
-        disputed(f) && !f.verdict ? el("span", {class: "dispute", text: f.source === "llm" ? "(расхождение с ответом правил)" : "(расхождение с ответом ИИ)"}) : null,
-        f._fresh ? el("span", {class: "accepted", text: f.verdict === "llm" ? "(выбран ответ ИИ)" : "(выбран ответ правила)"}) : null,
+        disputed(f) && !f.verdict ? el("span", {class: "dispute", text: f.source === "llm" ? "(расхождение с ответом Системного AI)" : "(расхождение с ответом ИИ)"}) : null,
+        f._fresh ? el("span", {class: "accepted", text: f.verdict === "llm" ? "(выбран ответ ИИ)" : "(выбран ответ Системного AI)"}) : null,
         whoSees(f)),
       el("div", {text: f.problem}),
-      f.rule_problem ? el("details", {class: "rule-says"}, el("summary", {text: "Что пишет правило"}), el("div", {text: f.rule_problem}), el("div", {class: "note", text: f.rule_recommendation})) : null,
+      f.rule_problem ? el("details", {class: "rule-says"}, el("summary", {text: "Что пишет Системный AI"}), el("div", {text: f.rule_problem}), el("div", {class: "note", text: f.rule_recommendation})) : null,
       disputed(f) ? verdictBar(v, f) : null,
       historyBlock(f),
       f.quote ? el("div", {class: "quote"}, el("small", {title: "Поле источника: " + f.field, text: fieldName(f.field)}), "«" + f.quote + "»") : el("div", {class: "quote"}, el("small", {title: "Поле источника: " + f.field, text: fieldName(f.field)}), el("span", {class: "gap-flag", text: "поле пустое"})),

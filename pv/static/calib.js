@@ -17,7 +17,7 @@ function showModelChip(c) {
   if (!chip) return;
   const name = c.model && c.model.model ? c.model.model + " (" + c.model.provider + ")" : "";
   const text = {
-    no_model: "модель не подключена — работают правила",
+    no_model: "модель не подключена — работает Системный AI",
     running: "модель: " + name + " — настраивается",
     needed: "модель: " + name + " — не настроена",
     failed: "модель: " + name + " — без настройки",
