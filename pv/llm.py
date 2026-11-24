@@ -49,7 +49,7 @@ class ChatLLM:
 
     def models(self) -> list[str]:
         """Список доступных моделей; пустой, если сервер его не отдаёт."""
-        r = self._client.get(f"{self.base_url}/models", headers=self._headers(), timeout=5.0)
+        r = self._client.get(f"{self.base_url}/models", headers=self._headers(), timeout=20.0)
         r.raise_for_status()
         data = r.json().get("data") or []
         return [m.get("id", "") for m in data if isinstance(m, dict)]

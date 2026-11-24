@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 from datetime import datetime
 from dataclasses import replace
 from pathlib import Path
@@ -84,9 +85,10 @@ def create_app(cfg: config_mod.Config | None = None, auto_calibrate: bool = True
     progress = Progress()
 
     def llm():
-        if not state["llm_ready"]:
+        # модель могла быть занята или ещё не запущена: если её не нашли, пробуем снова, но не чаще раза в полминуты
+        if state["llm"] is None and time.monotonic() - state.get("tried", -1e9) > 30:
+            state["tried"] = time.monotonic()
             state["llm"] = cli.make_llm(cfg, True)
-            state["llm_ready"] = True
         return state["llm"]
 
     def model_profile():
