@@ -188,7 +188,7 @@ def test_llm_invented_quote_missing_kind_and_duplicates_dropped():
         {"topic": "duties", "kind": "contradiction", "field": "duty", "quote": "Ведение", "problem": "п", "recommendation": "р",
          "conflict_field": "duty", "conflict_quote": "Ведение"},
         "мусор"))
-    assert [f.source for f in analyze(v, m)] == ["rule"]
+    assert [f.source for f in analyze(v, m)] == ["both"]        # выдумки отброшены, совпавшее с правилом — одно замечание
 
 
 def test_llm_contradiction_needs_two_real_quotes():

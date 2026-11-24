@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Статистика — Прозрачная вакансия</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23173a3a'/%3E%3Ccircle cx='14' cy='14' r='6.5' fill='none' stroke='%23f2b441' stroke-width='2.6'/%3E%3Cpath d='m19 19 6 6' stroke='%23f4efe4' stroke-width='2.8' stroke-linecap='round'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="/static/app.css?v=5">
+<link rel="stylesheet" href="/static/app.css?v=6">
 <style>
 .page { max-width: 1120px; margin: 0 auto; padding: 22px 24px 40px; display: grid; gap: 16px; }
 .lead h2 { margin: 0 0 6px; font-size: 26px; letter-spacing: -.02em; }
@@ -109,7 +109,17 @@ function setTable(st) {
   return el("section", {class: "box"}, el("h3", {text: st.title + " · " + st.modes.rules.vacancies + " " + plural(st.modes.rules.vacancies, "вакансия", "вакансии", "вакансий")}),
     el("p", {class: "about", text: st.key === "sample" ? "Десять вакансий, выданных организаторами вместе с заданием. Четыре из них понятные: замечаний по ним быть не должно." : "Двенадцать вакансий, которые мы написали сами. Проблемы в них выражены смыслом, а не привычными словами: должность «водитель» с обязанностями бухгалтера, пятидневка в поле графика и скользящий график в тексте. Пять вакансий понятные."}),
     el("div", {class: "scroll"}, el("table", {}, el("thead", {}, el("tr", {}, el("th", {text: "Способ"}), el("th", {text: "Найдено обязательных замечаний"}), el("th", {class: "n", title: "Доля найденных замечаний, которые есть в разметке", text: "Точность"}), el("th", {class: "n", text: "Лишних"}), el("th", {class: "n", title: "Лишние замечания по вакансиям, где замечаний быть не должно", text: "Лишних на понятных"}))), el("tbody", {}, rows))),
+    agreement(st),
     el("details", {}, el("summary", {text: "Где именно расхождения"}), el("ul", {}, details)));
+}
+
+// Совпадение мнений: что видят оба, что только правила, что только ИИ — и сколько из этого верно.
+function agreement(st) {
+  const a = st.agreement;
+  if (!a) return null;
+  const row = (name, x, note) => el("tr", {}, el("td", {text: name}), el("td", {class: "n", text: String(x[0])}), el("td", {class: "n" + (x[0] && x[1] === x[0] ? " good" : x[0] && x[1] < x[0] / 2 ? " bad" : ""), text: x[0] ? x[1] + " из " + x[0] : "—"}), el("td", {class: "muted", text: note}));
+  return el("div", {class: "scroll", style: "margin-top:14px"}, el("table", {}, el("thead", {}, el("tr", {}, el("th", {text: "Кто видит проблему"}), el("th", {class: "n", text: "Замечаний"}), el("th", {class: "n", text: "Из них верных"}), el("th", {text: "Что с ними делает сервис"}))),
+    el("tbody", {}, row("И правило, и ИИ", a.both, "одно замечание с формулировкой ИИ"), row("Только правило", a.rules_only, "показывается с пометкой, что ИИ не видит"), row("Только ИИ", a.llm_only, "показывается, если этот вид замечаний у модели надёжен"))));
 }
 
 function verdict(d) {

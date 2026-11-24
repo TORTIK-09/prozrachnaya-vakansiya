@@ -159,7 +159,10 @@ def build(entries: list[dict], stats: dict, mode: str, source: str, llm: LLM | N
             info = llm.describe() or {}
         except Exception:
             info = {}
-        model = {"provider": info.get("provider"), "model": info.get("model"), "used": True}
+        from .analyze import profile
+        # calibrated: модель настроена, её мнение учтено в замечаниях; иначе в отчёте только правила
+        model = {"provider": info.get("provider"), "model": info.get("model"), "used": True,
+                 "calibrated": profile.cached(info) is not None}
     return {
         "generated_at": (now or datetime.now().astimezone()).isoformat(timespec="seconds"),
         "mode": mode, "source": source, "model": model, "stats": stats, "vacancies": entries,

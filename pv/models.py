@@ -97,7 +97,7 @@ class Finding:
     problem: str          # в чём проблема, одним-двумя предложениями
     recommendation: str   # что именно уточнить у работодателя; без вымышленных фактов и выводов о законе
     conflict_with: Evidence | None = None  # только для kind == "contradiction": второе исходное значение
-    source: str = "rule"  # "rule" — найдено правилом, "llm" — найдено моделью
+    source: str = "rule"  # кто видит проблему: "rule" — только правило, "llm" — только модель, "both" — оба
 
     def to_json(self) -> dict[str, Any]:
         d = asdict(self)
@@ -113,7 +113,7 @@ def validate(f: Finding, v: Vacancy) -> list[str]:
         errs.append(f"тема «{f.topic}» не из списка")
     if f.kind not in KINDS:
         errs.append(f"вид «{f.kind}» не из списка")
-    if f.source not in ("rule", "llm"):
+    if f.source not in ("rule", "llm", "both"):
         errs.append(f"источник «{f.source}» не из списка")
     if not f.problem.strip() or not f.recommendation.strip():
         errs.append("пустая суть или рекомендация")

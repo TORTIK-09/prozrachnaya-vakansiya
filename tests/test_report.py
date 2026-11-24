@@ -118,7 +118,7 @@ def test_build_shape():
     entries, stats = report.analyze_all(RAW[:2], good, None)
     r = report.build(entries, stats, "file", "sample.json", FakeLLM())
     assert list(r) == ["generated_at", "mode", "source", "model", "stats", "vacancies"]
-    assert r["model"] == {"provider": "тест", "model": "m1", "used": True}
+    assert r["model"] == {"provider": "тест", "model": "m1", "used": True, "calibrated": False}
     assert report.build(entries, stats, "api", "u", None)["model"]["used"] is False
 
 

@@ -133,6 +133,8 @@ def test_rules_preview_comes_first_when_model_is_slow(tmp_path, monkeypatch):
             gate.acquire(timeout=5)
             return '{"findings": []}'
 
+    from pv.analyze import profile
+    monkeypatch.setattr(profile, "cached", lambda info, reports_dir=None: {"blocked": []})
     monkeypatch.setattr(cli, "make_llm", lambda c, enabled: Slow())
     monkeypatch.setattr(cli, "log", lambda m: None)
     cfg = config.Config(reports_dir=str(tmp_path / "reports"), workers=1)

@@ -162,3 +162,23 @@ def test_manual_mode_does_not_start_by_itself(tmp_path, monkeypatch):
     assert c.get("/api/calibration").json()["state"] == "needed" and llm.calls == 0
     assert c.post("/api/calibration").json()["state"] == "running"
     assert wait_done(c)["state"] == "done"
+
+
+def test_agreement_takes_model_wording_and_rule_quotes():
+    rule = Finding("schedule", "ambiguous", "schedule", "Гибкий график", "текст правила", "совет правила")
+    other = Finding("salary", "missing", "salary_min", "", "п", "р")
+    llm_same = Finding("schedule", "ambiguous", "schedule", "Гибкий", "текст ИИ", "совет ИИ", source="llm")
+    llm_new = Finding("duties", "ambiguous", "duty", "Работа", "п", "р", source="llm")
+    out = {f.topic: f for f in merge([rule, other], [llm_same, llm_new], set())}
+    assert (out["schedule"].source, out["schedule"].problem, out["schedule"].quote) == ("both", "текст ИИ", "Гибкий график")
+    assert out["salary"].source == "rule" and out["duties"].source == "llm" and len(out) == 3
+    # ненадёжный вид отключается только там, где ИИ один; совпадение с правилом остаётся
+    blocked = {("schedule", "ambiguous"), ("duties", "ambiguous")}
+    assert sorted(f.source for f in merge([rule, other], [llm_same, llm_new], blocked)) == ["both", "rule"]
+
+
+def test_calibration_counts_who_sees_what():
+    r = calibrate.run(Fake())
+    a = {s["key"]: s["agreement"] for s in r["sets"]}
+    assert a["extra"]["llm_only"] == [2, 1] and a["extra"]["both"] == [0, 0]
+    assert a["sample"]["rules_only"][0] == a["sample"]["rules_only"][1] > 10

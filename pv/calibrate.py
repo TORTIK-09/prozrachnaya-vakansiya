@@ -72,6 +72,7 @@ def run(llm: LLM, progress: Callable[[int, int, float], None] = lambda done, tot
     done = errors = 0
     rule_time = llm_time = 0.0
     per_set = []
+    agree = {}
     tally: dict[tuple[str, str], dict[str, int]] = {}      # вид замечаний модели → сколько верных и лишних
     for st in sets:
         rule_found: dict[str, list[Finding]] = {}
@@ -92,6 +93,12 @@ def run(llm: LLM, progress: Callable[[int, int, float], None] = lambda done, tot
             progress(done, total, llm_time / done)
             must, allowed = scoring.gold_sets(st["gold"], v.id)
             taken = {(f.topic, f.kind) for f in rule_found[v.id]}
+            # кто что видит: правило, модель или оба — и сколько из этого верно по разметке
+            seen_llm = {(f.topic, f.kind) for f in llm_found[v.id]}
+            a = agree.setdefault(st["key"], {k: [0, 0] for k in ("both", "rules_only", "llm_only")})
+            for name, keys in (("both", taken & seen_llm), ("rules_only", taken - seen_llm), ("llm_only", seen_llm - taken)):
+                a[name][0] += len(keys)
+                a[name][1] += len(keys & (must | allowed))
             for f in llm_found[v.id]:
                 key = (f.topic, f.kind)
                 if f.kind == "missing" or key in taken:
@@ -118,7 +125,7 @@ def run(llm: LLM, progress: Callable[[int, int, float], None] = lambda done, tot
             "both_raw": {v.id: merge(rule_found[v.id], llm_found[v.id], set()) for v in vs},
             "both": {v.id: merge(rule_found[v.id], llm_found[v.id], blocked_set) for v in vs},
         }
-        out_sets.append({"key": st["key"], "title": st["title"], "about": st["about"],
+        out_sets.append({"key": st["key"], "title": st["title"], "about": st["about"], "agreement": agree.get(st["key"]),
                          "modes": {m: _brief(scoring.score(_report(vs, f), st["gold"])) for m, f in modes.items()}})
     info = llm.describe() or {}
     return {
