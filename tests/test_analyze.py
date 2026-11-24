@@ -2,6 +2,7 @@
 import json
 
 import httpx
+import pytest
 
 from pv import llm as llm_mod
 from pv import source
@@ -132,6 +133,21 @@ def test_soft_skills_only_requirements():
     assert ("requirements", "ambiguous") in kinds(vac(requirements="Ответственность, активность.", requirement=blank))
     assert ("requirements", "ambiguous") not in kinds(vac(requirements="Без требований.", requirement=blank))
     assert ("requirements", "missing") in kinds(vac(requirements="", requirement={"education": "Не указано", "experience": 0}))
+
+
+@pytest.fixture(autouse=True)
+def calibrated(monkeypatch):
+    """Подставная модель считается настроенной, ни один вид замечаний не отключён."""
+    from pv.analyze import profile
+    monkeypatch.setattr(profile, "cached", lambda info, reports_dir=None: {"blocked": []})
+
+
+def test_uncalibrated_model_is_not_trusted(monkeypatch):
+    from pv.analyze import profile
+    monkeypatch.setattr(profile, "cached", lambda info, reports_dir=None: None)
+    m = FakeLLM(llm_answer({"topic": "duties", "kind": "ambiguous", "field": "duty", "quote": "Ведение первичной документации",
+                            "problem": "п", "recommendation": "р"}))
+    assert analyze(vac(), m) == [] and m.calls == []        # модель даже не вызывается
 
 
 class FakeLLM:

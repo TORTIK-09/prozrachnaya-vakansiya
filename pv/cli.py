@@ -47,7 +47,7 @@ def make_llm(cfg: config_mod.Config, enabled: bool) -> LLM | None:
     from .analyze import profile
     info = client.describe()
     if profile.load(info, cfg.reports) is None:
-        log(f"модель {info.get('model')} сервису незнакома: её замечания берутся без настройки. "
+        log(f"модель {info.get('model')} ещё не настроена: до настройки её замечания в отчёт не идут, работают правила. "
             "Настроить: python -m pv calibrate (панель делает это сама)")
     return client
 

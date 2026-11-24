@@ -77,7 +77,7 @@ def test_saved_profile_is_applied_in_analysis(tmp_path):
                    "schedule": "Понедельник–пятница, 10:00–19:00", "employment": "Полная занятость",
                    "requirement": {"education": "Среднее", "experience": 0},
                    "addresses": {"address": [{"location": "г. Светлогорск, ул. Примерная, д. 3"}]}})
-    assert [f.source for f in analyze(v, llm)] == ["llm"]               # до настройки придирка проходит
+    assert analyze(v, llm) == [] and llm.calls == 0                     # до настройки модели не верим вовсе
     path = calibrate.save(calibrate.run(llm), tmp_path)
     assert path.name == "test__fake-1.json" and profile.load(llm.describe(), tmp_path)["blocked"]
     blocked = profile.blocked(profile.load(llm.describe(), tmp_path))
@@ -86,7 +86,7 @@ def test_saved_profile_is_applied_in_analysis(tmp_path):
     assert profile.slug({"provider": "ollama", "model": "qwen2.5:3b"}) == "ollama__qwen2.5-3b"
 
 
-def test_modes_of_analyze():
+def test_modes_of_analyze(monkeypatch):
     llm = Fake()
     v = normalize({"id": "K", "job-name": "Кладовщик", "duty": "Учёт остатков. Рабочее место находится на складе в г. Балтийске.",
                    "requirements": "Знание складского учёта", "salary_min": 1, "salary_max": 2, "schedule": "Гибкий график",
@@ -94,6 +94,8 @@ def test_modes_of_analyze():
                    "addresses": {"address": [{"location": "г. Калининград, ул. Учебная, д. 7"}]}})
     assert {(f.topic, f.source) for f in analyze(v, llm, "rules")} == {("schedule", "rule")}
     assert {(f.topic, f.source) for f in analyze(v, llm, "llm")} == {("location", "llm")}
+    assert {(f.topic, f.source) for f in analyze(v, llm, "both")} == {("schedule", "rule")}       # не настроена
+    monkeypatch.setattr(profile, "cached", lambda info, reports_dir=None: {"blocked": []})
     assert {(f.topic, f.source) for f in analyze(v, llm, "both")} == {("schedule", "rule"), ("location", "llm")}
     assert analyze(v, None, "llm") == []
 

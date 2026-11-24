@@ -36,11 +36,15 @@ def analyze(v: Vacancy, llm: LLM | None = None, mode: str = "both") -> list[Find
     if mode == "rules" or llm is None:
         return _sorted(found)
     try:
-        llm_found = ai.find(v, llm)
-    except Exception:
-        return _sorted(found)      # модель недоступна или ответила мусором: остаются замечания правил
-    try:
         info = llm.describe() or {}
     except Exception:
         info = {}
-    return merge(found, llm_found, profile.blocked(profile.cached(info)))
+    prof = profile.cached(info)
+    if prof is None:
+        # модель ещё не настроена: неизвестно, каким её замечаниям можно верить, поэтому в отчёт они не идут
+        return _sorted(found)
+    try:
+        llm_found = ai.find(v, llm)
+    except Exception:
+        return _sorted(found)      # модель недоступна или ответила мусором: остаются замечания правил
+    return merge(found, llm_found, profile.blocked(prof))
