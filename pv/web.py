@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import threading
+from datetime import datetime
 from dataclasses import replace
 from pathlib import Path
 
@@ -128,6 +129,26 @@ def create_app(cfg: config_mod.Config | None = None, auto_calibrate: bool = True
             "img-src 'self' data:; frame-ancestors 'none'")
         return response
 
+    verdict_lock = threading.Lock()
+
+    def verdicts() -> dict:
+        """Решения человека там, где правило и ИИ разошлись: ключ «вакансия|тема|вид» → чей ответ принят."""
+        try:
+            data = json.loads((cfg.reports / "verdicts.json").read_text(encoding="utf-8"))
+            return data if isinstance(data, dict) else {}
+        except (ValueError, OSError):
+            return {}
+
+    def with_verdicts(rep: dict) -> dict:
+        saved = verdicts()
+        if saved:
+            for v in rep.get("vacancies", []):
+                for f in v.get("findings", []):
+                    hit = saved.get(f"{v.get('id')}|{f.get('topic')}|{f.get('kind')}")
+                    if hit:
+                        f["verdict"] = hit["choice"]
+        return rep
+
     def read_report(kind: str) -> dict | None:
         path = cfg.reports / ("latest.json" if kind == "latest" else "check.json")
         if not path.is_file():
@@ -180,7 +201,10 @@ def create_app(cfg: config_mod.Config | None = None, auto_calibrate: bool = True
         """Сравнение способов работы: только правила, только модель, вместе."""
         prof = model_profile()
         data = prof if prof is not None else calibrate.rules_only()
-        return {"stats": data, "calibration": calibration()}
+        saved = verdicts().values()
+        human = {"rule": sum(1 for x in saved if x.get("choice") == "rule"),
+                 "llm": sum(1 for x in saved if x.get("choice") == "llm")}
+        return {"stats": data, "calibration": calibration(), "verdicts": human}
 
     @app.get("/api/report")
     def get_report(kind: str = "check"):
@@ -189,7 +213,23 @@ def create_app(cfg: config_mod.Config | None = None, auto_calibrate: bool = True
         rep = read_report(kind)
         if rep is None:
             raise HTTPException(404, "Такого отчёта ещё нет")
-        return rep
+        return with_verdicts(rep)
+
+    @app.post("/api/verdict")
+    def set_verdict(vacancy_id: str, topic: str, kind: str, choice: str, source: str = ""):
+        """Человек решает, чей ответ принять при расхождении: choice = rule, llm или none (снять решение)."""
+        if choice not in ("rule", "llm", "none") or len(vacancy_id) > 200 or len(topic) > 40 or len(kind) > 40:
+            raise HTTPException(422, "choice: rule, llm или none")
+        key = f"{vacancy_id}|{topic}|{kind}"
+        with verdict_lock:
+            saved = verdicts()
+            if choice == "none":
+                saved.pop(key, None)
+            else:
+                saved[key] = {"choice": choice, "source": source[:10],
+                              "at": datetime.now().astimezone().isoformat(timespec="seconds")}
+            report.write_json(cfg.reports / "verdicts.json", saved)
+        return {"ok": True, "choice": None if choice == "none" else choice}
 
     def preview(raw: list) -> None:
         """Мгновенный предварительный результат одних правил — пока модель думает, страница уже не пустая."""

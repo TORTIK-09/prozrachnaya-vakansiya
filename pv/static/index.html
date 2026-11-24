@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Прозрачная вакансия</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23173a3a'/%3E%3Ccircle cx='14' cy='14' r='6.5' fill='none' stroke='%23f2b441' stroke-width='2.6'/%3E%3Cpath d='m19 19 6 6' stroke='%23f4efe4' stroke-width='2.8' stroke-linecap='round'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="/static/app.css?v=6">
+<link rel="stylesheet" href="/static/app.css?v=7">
 </head>
 <body>
 <header class="top">
@@ -98,12 +98,16 @@ async function busy(btn, fn) {
   try { await fn(); } catch (e) { banner(e.message); if (e.data && e.data.report) setReport(e.data.report); } finally { btn.classList.remove("busy"); btn.disabled = false; }
 }
 
-function counts(v) { const c = {contradiction: 0, ambiguous: 0, missing: 0}; for (const f of v.findings || []) if (f.kind in c) c[f.kind]++; return c; }
+// Замечание снято человеком: при расхождении он принял ответ той стороны, которая проблемы не видит.
+function dismissed(f) { return (f.source === "rule" && f.verdict === "llm") || (f.source === "llm" && f.verdict === "rule"); }
+function live(v) { return (v.findings || []).filter(f => !dismissed(f)); }
+function disputed(f) { const m = S.report && S.report.model; return (m && m.used && m.calibrated && f.source === "rule") || f.source === "llm"; }
+function counts(v) { const c = {contradiction: 0, ambiguous: 0, missing: 0}; for (const f of live(v)) if (f.kind in c) c[f.kind]++; return c; }
 function visible() {
   const q = S.q.trim().toLowerCase();
   return (S.report ? S.report.vacancies : []).filter(v => {
     if (q && !((v.title || "") + " " + (v.company || "") + " " + v.id).toLowerCase().includes(q)) return false;
-    const fs = v.findings || [];
+    const fs = live(v);
     if (S.fKind === "clean") return fs.length === 0;
     if (S.fKind && !fs.some(f => f.kind === S.fKind)) return false;
     if (S.fTopic && !fs.some(f => f.topic === S.fTopic)) return false;
@@ -123,15 +127,15 @@ function render() { renderSummary(); renderFilters(); renderList(); renderDetail
 
 function renderSummary() {
   const vs = S.report ? S.report.vacancies : [];
-  const bad = vs.filter(v => (v.findings || []).length).length;
-  const total = vs.reduce((n, v) => n + (v.findings || []).length, 0);
+  const bad = vs.filter(v => live(v).length).length;
+  const total = vs.reduce((n, v) => n + live(v).length, 0);
   setNum("sTotal", S.report ? vs.length : null);
   setNum("sClean", S.report ? vs.length - bad : null);
   setNum("sBad", S.report ? bad : null);
   setNum("sFind", S.report ? total : null);
   const by = {}; let max = 1;
   for (const t in TOPICS) by[t] = {contradiction: 0, ambiguous: 0, missing: 0, n: 0};
-  for (const v of vs) for (const f of v.findings || []) if (by[f.topic]) { by[f.topic][f.kind]++; by[f.topic].n++; }
+  for (const v of vs) for (const f of live(v)) if (by[f.topic]) { by[f.topic][f.kind]++; by[f.topic].n++; }
   for (const t in by) max = Math.max(max, by[t].n);
   const box = $("topics");
   if (box.children.length !== Object.keys(TOPICS).length) {
@@ -159,7 +163,7 @@ function renderList() {
   if (!S.report) return $("list").replaceChildren(el("div", {class: "empty", text: S.kind === "latest" ? "Отчёта по вакансиям с портала ещё нет. Нажмите «Загрузить с портала»." : "Отчёта ещё нет. Нажмите «Проверить учебный набор»."}));
   if (!vs.length) return $("list").replaceChildren(el("div", {class: "empty", text: "Под эти условия вакансий нет"}));
   $("list").replaceChildren(...vs.map(v => {
-    const c = counts(v), n = (v.findings || []).length;
+    const c = counts(v), n = live(v).length;
     const fresh = !LIVE.seen.has(v.id); LIVE.seen.add(v.id);
     return el("button", {class: "item" + (fresh ? " enter" : "") + (v.pending ? " pending" : ""), "aria-current": String(v.id === S.sel), onclick: () => { S.sel = v.id; S.tab = S.tab === "resume" ? "resume" : "audit"; renderList(); renderDetail(); }},
       el("span", {class: "t", text: v.title || "(без названия)"}),
@@ -208,6 +212,22 @@ function renderDetail() {
   if (changed) { box.classList.remove("fade"); void box.offsetWidth; box.classList.add("fade"); }
 }
 
+// Расхождение: один метод видит проблему, другой — нет. Человек принимает один из ответов.
+function verdictBar(v, f) {
+  const ruleSays = f.source === "rule" ? "проблема есть" : "проблемы нет", aiSays = f.source === "llm" ? "проблема есть" : "проблемы нет";
+  async function choose(choice) {
+    try {
+      await api("/api/verdict?vacancy_id=" + encodeURIComponent(v.id) + "&topic=" + f.topic + "&kind=" + f.kind + "&choice=" + choice + "&source=" + f.source, {method: "POST"});
+      if (choice === "none") delete f.verdict; else f.verdict = choice;
+      renderSummary(); renderList(); renderDetail();
+    } catch (e) { banner(e.message); }
+  }
+  if (f.verdict) return el("div", {class: "verdict"}, el("span", {text: dismissed(f) ? "Замечание снято: принято, что проблемы нет." : "Замечание подтверждено."}), el("button", {class: "copy", onclick: () => choose("none"), text: "изменить решение"}));
+  return el("div", {class: "verdict"},
+    el("span", {class: "ans"}, "Правило: " + ruleSays, el("button", {class: "copy", onclick: () => choose("rule"), text: "принять"})),
+    el("span", {class: "ans"}, "ИИ: " + aiSays, el("button", {class: "copy", onclick: () => choose("llm"), text: "принять"})));
+}
+
 // Кто видит проблему: правило, ИИ или оба. Две маленькие метки; погашенная — «не видит».
 function whoSees(f) {
   const m = S.report && S.report.model, ai = m && m.used && m.calibrated;
@@ -235,16 +255,20 @@ function auditView(v) {
       el("dt", {title: "Поле источника: " + f, text: FIELD_NAMES[f]}),
       el("dd", {}, has ? highlight(String(fields[f]), marksBy[f] || []) : (f in missing ? el("span", {class: "gap-flag", style: "cursor:pointer", onclick: () => focusFinding(missing[f]), text: "не указано — см. замечание"}) : "не указано")));
   }));
-  const list = fs.length ? fs.map((f, i) => el("article", {class: "finding " + f.kind, "data-f": i, onmouseenter: () => document.querySelectorAll('mark[data-f="' + i + '"]').forEach(n => n.classList.add("active")), onmouseleave: () => document.querySelectorAll("mark.active").forEach(n => n.classList.remove("active"))},
+  const list = fs.length ? fs.map((f, i) => el("article", {class: "finding " + f.kind + (dismissed(f) ? " dismissed" : ""), "data-f": i, onmouseenter: () => document.querySelectorAll('mark[data-f="' + i + '"]').forEach(n => n.classList.add("active")), onmouseleave: () => document.querySelectorAll("mark.active").forEach(n => n.classList.remove("active"))},
       el("div", {class: "f-top"}, el("span", {class: "kind " + f.kind, text: KINDS[f.kind] || f.kind}), el("span", {class: "f-topic", text: TOPICS[f.topic] || f.topic}),
+        disputed(f) && !f.verdict ? el("span", {class: "dispute", text: f.source === "llm" ? "(расхождение с ответом правил)" : "(расхождение с ответом ИИ)"}) : null,
+        f.verdict ? el("span", {class: "accepted", text: f.verdict === "llm" ? "(принят ответ ИИ)" : "(принят ответ правила)"}) : null,
         whoSees(f)),
       el("div", {text: f.problem}),
+      f.rule_problem ? el("details", {class: "rule-says"}, el("summary", {text: "Что пишет правило"}), el("div", {text: f.rule_problem}), el("div", {class: "note", text: f.rule_recommendation})) : null,
+      disputed(f) ? verdictBar(v, f) : null,
       f.quote ? el("div", {class: "quote"}, el("small", {title: "Поле источника: " + f.field, text: fieldName(f.field)}), "«" + f.quote + "»") : el("div", {class: "quote"}, el("small", {title: "Поле источника: " + f.field, text: fieldName(f.field)}), el("span", {class: "gap-flag", text: "поле пустое"})),
       f.conflict_with ? [el("div", {class: "vs", text: "ПРОТИВ"}), el("div", {class: "quote"}, el("small", {title: "Поле источника: " + f.conflict_with.field, text: fieldName(f.conflict_with.field)}), "«" + f.conflict_with.quote + "»")] : null,
       el("div", {class: "rec"}, el("p", {}, el("b", {text: "Что уточнить. "}), f.recommendation), el("button", {class: "copy", onclick: e => copyText(f.recommendation, e.currentTarget), text: "копировать"}))))
     : [el("div", {class: "clean-box", text: "Условия описаны понятно: пропусков, неоднозначностей и противоречий не найдено."})];
   return el("div", {class: "d-body"},
-    el("div", {class: "col"}, el("h3", {text: fs.length ? "Замечания · " + fs.length : "Замечания"}), list, v.error ? el("div", {class: "note", text: "Анализ этой вакансии завершился сбоем: " + v.error}) : null),
+    el("div", {class: "col"}, el("h3", {text: fs.length ? "Замечания · " + live(v).length : "Замечания"}), list, v.error ? el("div", {class: "note", text: "Анализ этой вакансии завершился сбоем: " + v.error}) : null),
     el("div", {class: "col"}, el("h3", {text: "Что написано в вакансии"}), card));
 }
 

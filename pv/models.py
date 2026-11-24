@@ -97,12 +97,17 @@ class Finding:
     problem: str          # в чём проблема, одним-двумя предложениями
     recommendation: str   # что именно уточнить у работодателя; без вымышленных фактов и выводов о законе
     conflict_with: Evidence | None = None  # только для kind == "contradiction": второе исходное значение
+    rule_problem: str = ""         # при source == "both": что написало правило — для сверки с формулировкой модели
+    rule_recommendation: str = ""
     source: str = "rule"  # кто видит проблему: "rule" — только правило, "llm" — только модель, "both" — оба
 
     def to_json(self) -> dict[str, Any]:
         d = asdict(self)
         if self.conflict_with is None:
             d.pop("conflict_with")
+        if not self.rule_problem:
+            d.pop("rule_problem")
+            d.pop("rule_recommendation")
         return d
 
 

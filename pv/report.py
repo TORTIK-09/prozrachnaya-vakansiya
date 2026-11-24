@@ -29,6 +29,7 @@ def _finding_from_json(d: dict) -> Finding:
     c = d.get("conflict_with")
     return Finding(topic=d["topic"], kind=d["kind"], field=d["field"], quote=d["quote"], problem=d["problem"],
                    recommendation=d["recommendation"], conflict_with=Evidence(c["field"], c["quote"]) if c else None,
+                   rule_problem=d.get("rule_problem", ""), rule_recommendation=d.get("rule_recommendation", ""),
                    source=d.get("source", "rule"))
 
 

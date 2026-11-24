@@ -19,7 +19,7 @@ from typing import Callable
 
 from . import report, scoring, source
 from .analyze import ai, merge, profile, rules
-from .analyze.version import VERSION
+from .analyze.version import PROFILE_VERSION as VERSION
 from .config import ROOT
 from .models import LLM, Finding
 from .normalize import normalize

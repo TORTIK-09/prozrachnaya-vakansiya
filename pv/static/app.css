@@ -229,3 +229,13 @@ mark.active { outline: 2px solid var(--accent); }
 .who i.on { background: var(--sunken); color: var(--ink); border-color: var(--ink-3); }
 .who i.on.ai { background: var(--accent); border-color: var(--accent); color: #fff; }
 .who i.off { color: var(--ink-3); text-decoration: line-through; opacity: .6; }
+
+/* расхождение правила и ИИ: решение человека */
+.dispute { font-size: 12px; color: var(--amb); font-weight: 600; }
+.accepted { font-size: 12px; color: var(--ok); font-weight: 600; }
+.verdict { margin-top: 8px; padding: 7px 10px; border-radius: 7px; background: var(--sunken); display: flex; gap: 8px 18px; flex-wrap: wrap; align-items: center; font-size: 13.5px; }
+.verdict .ans { display: inline-flex; gap: 8px; align-items: center; }
+.finding.dismissed { opacity: .55; border-left-color: var(--line); }
+.finding.dismissed .quote, .finding.dismissed .rec { display: none; }
+.rule-says { margin: 6px 0 0; font-size: 13.5px; } .rule-says summary { font-size: 12.5px; }
+.rule-says div { margin-top: 4px; }

@@ -120,3 +120,21 @@ def test_resume_command(tmp_path, monkeypatch):
     assert cli.cmd_resume(cfg, "RES-02", "DEMO-39-007", str(rep), str(out)) == 0
     assert json.loads(out.read_text(encoding="utf-8"))["resume_id"] == "RES-02"
     assert cli.cmd_resume(cfg, "RES-02", "НЕТ", str(rep), None) == 2
+
+
+def test_human_verdict_on_disagreement(client):
+    c, cfg = client
+    c.post("/api/check-sample")
+    q = "/api/verdict?vacancy_id=DEMO-39-004&topic=location&kind=contradiction&source=rule&choice="
+    assert c.post(q + "llm").json() == {"ok": True, "choice": "llm"}
+    f = next(v for v in c.get("/api/report?kind=check").json()["vacancies"] if v["id"] == "DEMO-39-004")["findings"][0]
+    assert f["verdict"] == "llm"
+    assert c.get("/api/stats").json()["verdicts"] == {"rule": 0, "llm": 1}
+    c.post(q + "rule")
+    assert c.get("/api/stats").json()["verdicts"] == {"rule": 1, "llm": 0}
+    c.post(q + "none")
+    f = next(v for v in c.get("/api/report?kind=check").json()["vacancies"] if v["id"] == "DEMO-39-004")["findings"][0]
+    assert "verdict" not in f and c.post(q + "кто-то").status_code == 422
+    # сам файл отчёта решения человека не меняют
+    import json as _json
+    assert "verdict" not in (cfg.reports / "check.json").read_text(encoding="utf-8")

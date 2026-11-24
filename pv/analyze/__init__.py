@@ -35,7 +35,8 @@ def merge(rule_found: list[Finding], llm_found: list[Finding], blocked: set[tupl
         else:
             # мнения совпали: одно замечание. Формулировка — модели, она написана под эту вакансию;
             # цитаты — правила, они проверены и точнее.
-            out.append(replace(f, problem=same.problem, recommendation=same.recommendation, source="both"))
+            out.append(replace(f, problem=same.problem, recommendation=same.recommendation, source="both",
+                               rule_problem=f.problem, rule_recommendation=f.recommendation))
     taken = {(f.topic, f.kind) for f in rule_found}
     out += [f for f in llm_found                # проблему видит только модель
             if f.kind != "missing" and (f.topic, f.kind) not in taken and (f.topic, f.kind) not in blocked]
