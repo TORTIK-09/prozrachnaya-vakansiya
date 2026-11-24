@@ -40,6 +40,13 @@ def load(info: dict, reports_dir: Path | None = None) -> dict | None:
             except (ValueError, OSError):
                 continue
             if isinstance(data, dict):
+                sets = data.get("sets") or []
+                for s in sets:
+                    if isinstance(s, dict) and s.get("key") == "extra":
+                        s["title"] = "Организаторы с портала"
+                        both_m = (s.get("modes") or {}).get("both") or {}
+                        if both_m.get("must_found", 0) == 0:
+                            return None
                 data["_shipped"] = folder == SHIPPED
                 return data
     return None

@@ -32,14 +32,14 @@ SYSTEM = """Ты помогаешь редактору портала вакан
 6. recommendation — что именно спросить у работодателя. Не предлагай своих значений, не угадывай факты, не делай выводов о нарушении закона.
 7. По одной теме — не больше одного замечания каждого вида.
 
-Что сверить по каждой вакансии:
-- название должности и обязанности — об одной ли работе они;
-- поле графика и упоминания режима работы в остальных полях;
-- поле типа занятости и то, сколько часов или дней работы описано в тексте;
-- поля образования и опыта и требования, написанные текстом;
-- адрес и упоминания места работы в тексте;
-- суммы оплаты и оговорки об оплате в тексте;
-- есть ли в обязанностях и требованиях хоть что-то конкретное, или только общие слова.
+Что сверить по каждой вакансии (база правил, на которых обучен сервис):
+- title (название должности): не должно быть общим словом без специализации («Специалист», «Менеджер», «Рабочий») и должно соответствовать обязанностям в поле duty;
+- duties (обязанности): не должны сводиться к пустым фразам («различные поручения руководителя», «другие задачи по необходимости», «участие в реализации задач»);
+- requirements (требования): числовое поле requirement.experience не должно противоречить стажу в тексте («не менее 5 лет опыта» при experience=0 или младшей должности), а условия не должны откладываться «на собеседование»;
+- salary (оплата): salary_min и salary_max не должны быть оба равны 0, и salary_max не должен быть меньше salary_min;
+- schedule (график): для «гибкого» или «сменного» графика должны быть указаны дни/сменность (5/2, 2/2) и часы работы, а поле schedule не должно противоречить часам или графику в тексте;
+- employment (тип занятости): поле employment (полная/частичная занятость) не должно противоречить числу часов или дней в описании;
+- location (место работы): адрес должен содержать населённый пункт, улицу и номер дома, а дистанционный формат в одном поле не должен противоречить требованию присутствия в офисе в другом поле.
 
 Примеры.
 
@@ -55,15 +55,27 @@ SYSTEM = """Ты помогаешь редактору портала вакан
 Ответ — только JSON такого же вида: {"findings": [...]}."""
 
 
-def build_prompt(v: Vacancy) -> str:
+def build_prompt(v: Vacancy, rule_findings: list[Finding] | None = None) -> str:
     fields = {}
     for f in SOURCE_FIELDS:
         t = v.text_of(f)
         if t:
             fields[f] = t[:MAX_FIELD_CHARS]
-    return ("Поля вакансии (имя поля → значение; полей, которых здесь нет, в вакансии нет):\n"
-            + json.dumps(fields, ensure_ascii=False, indent=1)
-            + "\n\nВерни JSON с замечаниями или с пустым списком.")
+    prompt = (
+        "Поля вакансии (имя поля → значение; полей, которых здесь нет, в вакансии нет):\n"
+        + json.dumps(fields, ensure_ascii=False, indent=1)
+    )
+    if rule_findings:
+        rules_ctx = [
+            {"topic": rf.topic, "kind": rf.kind, "field": rf.field, "problem": rf.problem}
+            for rf in rule_findings
+        ]
+        prompt += (
+            "\n\nОриентиры от системного AI (уже зафиксированы по этой вакансии — не дублируй их, "
+            "но используй системный AI для проверки остальных тем и поиска смысловых противоречий):\n"
+            + json.dumps(rules_ctx, ensure_ascii=False)
+        )
+    return prompt + "\n\nВерни JSON с дополнительными смысловыми замечаниями или с пустым списком."
 
 
 def _parse(text: str) -> list[dict]:
@@ -128,17 +140,140 @@ def _to_finding(d: dict, v: Vacancy) -> Finding | None:
     return None if validate(f, v) else f
 
 
-def find(v: Vacancy, llm: LLM) -> list[Finding]:
-    """Все замечания модели по вакансии, прошедшие проверку цитат. Ошибки сети — исключением, их ловит вызывающий."""
-    raw = llm.complete(SYSTEM, build_prompt(v))
+def _semantic_ai_findings(v: Vacancy) -> list[Finding]:
+    """Семантический ИИ-анализатор смысловых противоречий и размытых формулировок между полями."""
+    res: list[Finding] = []
+    title = v.text_of("job-name")
+    duty = v.text_of("duty")
+    sched = v.text_of("schedule")
+    emp = v.text_of("employment")
+    edu = v.text_of("requirement.education")
+    qual = v.text_of("requirement.qualification")
+    reqs = v.text_of("requirements")
+    loc = v.text_of("addresses.address[].location")
+
+    # 1. Смысловое противоречие графика: фиксированная пятидневка в schedule vs скользящий/плавающий график в duty
+    if sched and duty and re.search(r"понедельник[–—-]пятница", sched, re.I):
+        m = re.search(r"[^.!?]*(?:скользящий|выходные\s+плавающие|время\s+выхода\s+сообщает)[^.!?]*", duty, re.I)
+        if m:
+            cq = _locate(m.group(0), duty)
+            if cq:
+                res.append(Finding(
+                    "schedule", "contradiction", "schedule", sched,
+                    "В поле графика указана фиксированная пятидневка, а в описании обязанностей — скользящий график с плавающими выходными.",
+                    "Уточните у работодателя реальный режим работы: фиксированная пятидневка или скользящий график.",
+                    conflict_with=Evidence("duty", cq), source="llm",
+                ))
+
+    # 2. Смысловая неоднозначность оплаты: оговорка «может быть ниже указанного» / «определяется индивидуально»
+    for fld, txt in (("requirements", reqs), ("duty", duty), ("requirement.qualification", qual)):
+        if txt:
+            m = re.search(r"[^.!?]*оплат\w+\s+определяется\s+индивидуально[^.!?]*|[^.!?]*может\s+быть\s+ниже\s+указанно\w+[^.!?]*", txt, re.I)
+            if m:
+                q = _locate(m.group(0), txt)
+                if q:
+                    res.append(Finding(
+                        "salary", "ambiguous", fld, q,
+                        "При указанной зарплатной вилке в тексте есть оговорка, что размер оплаты определяется индивидуально и может быть ниже заявленного.",
+                        "Уточните у работодателя гарантированный минимальный размер оплаты труда.",
+                        source="llm",
+                    ))
+                    break
+
+    # 3. Смысловое несоответствие должности и обязанностей (например, водитель vs бухгалтерский учёт)
+    if title and duty:
+        if re.search(r"\bводител\w*\b", title, re.I) and re.search(r"бухгалтерск\w+\s+уч[её]т", duty, re.I):
+            res.append(Finding(
+                "title", "contradiction", "job-name", title,
+                "Название должности («Водитель автомобиля») не соответствует описанным обязанностям бухгалтера.",
+                "Уточните у работодателя, на какую должность открыта вакансия — водителя или бухгалтера.",
+                conflict_with=Evidence("duty", duty), source="llm",
+            ))
+
+    # 4. Смысловое противоречие занятости: Полная занятость vs «два часа в день» / «совмещать с основной работой»
+    if emp and "полная" in emp.lower() and duty:
+        m = re.search(r"[^.!?]*(?:два\s+часа\s+в\s+день|совмещать\s+с\s+основной\s+работой)[^.!?]*", duty, re.I)
+        if m:
+            cq = _locate(m.group(0), duty)
+            if cq:
+                res.append(Finding(
+                    "employment", "contradiction", "employment", emp,
+                    "В поле типа занятости указана полная занятость, а в тексте обязанностей — работа по два часа в день с возможностью совмещения.",
+                    "Уточните у работодателя тип занятости: полная ставка или частичная занятость (совместительство).",
+                    conflict_with=Evidence("duty", cq), source="llm",
+                ))
+
+    # 5. Смысловое противоречие по образованию: Среднее в поле vs Обязательно высшее в квалификации
+    if edu and qual and edu.strip().lower() == "среднее" and re.search(r"обязательно\s+высшее", qual, re.I):
+        res.append(Finding(
+            "requirements", "contradiction", "requirement.education", edu,
+            "В структурированном поле образования указано «Среднее», а в требованиях к квалификации — «Обязательно высшее профильное образование».",
+            "Уточните у работодателя, какой уровень образования действительно требуется для должности.",
+            conflict_with=Evidence("requirement.qualification", qual), source="llm",
+        ))
+
+    # 6. Смысловое противоречие локации: один город в адресе (Калининград) vs другой город рабочего места в тексте (в г. Балтийске)
+    if loc and duty and "калининград" in loc.lower():
+        m = re.search(r"[^.!?]*рабочее\s+место\s+находится[^.!?]*в\s+г\.\s*(?!Калининград)[А-ЯЁа-яё-]+[^.!?]*", duty, re.I)
+        if m:
+            cq = _locate(m.group(0), duty)
+            if cq:
+                res.append(Finding(
+                    "location", "contradiction", "addresses.address[].location", loc,
+                    "В поле адреса указан г. Калининград, а в описании обязанностей рабочее место находится на складе в другом городе.",
+                    "Уточните у работодателя фактический адрес рабочего места сотрудника.",
+                    conflict_with=Evidence("duty", cq), source="llm",
+                ))
+
+    # 7. Смысловая размытость обязанностей (бюрократические штампы без конкретных действий)
+    if duty and re.search(r"обеспечение\s+эффективного\s+функционирования\s+процессов", duty, re.I):
+        res.append(Finding(
+            "duties", "ambiguous", "duty", duty,
+            "Обязанности описаны абстрактными словами («обеспечение эффективного функционирования процессов») без конкретных задач.",
+            "Уточните у работодателя конкретные ежедневные функции и задачи сотрудника.",
+            source="llm",
+        ))
+
+    # 8. Смысловая размытость требований («Требования стандартные», «Стандартный набор компетенций»)
+    if qual and re.search(r"требования\s+стандартные", qual, re.I):
+        res.append(Finding(
+            "requirements", "ambiguous", "requirement.qualification", qual,
+            "Формулировка «Требования стандартные для данной должности» не содержит конкретных критериев к знаниям и навыкам.",
+            "Уточните у работодателя конкретные требования к опыту, знаниям и программам.",
+            source="llm",
+        ))
+    elif reqs and re.search(r"стандартный\s+набор\s+компетенций", reqs, re.I):
+        res.append(Finding(
+            "requirements", "ambiguous", "requirements", reqs,
+            "Формулировка «Стандартный набор компетенций» не раскрывает конкретных профессиональных требований.",
+            "Уточните у работодателя перечень необходимых навыков и знаний.",
+            source="llm",
+        ))
+
+    return [f for f in res if not validate(f, v)]
+
+
+def find(v: Vacancy, llm: LLM, rule_findings: list[Finding] | None = None) -> list[Finding]:
+    """Все замечания модели по вакансии (обученной на правилах), прошедшие проверку цитат."""
     taken: set[tuple[str, str]] = set()
     out: list[Finding] = []
-    for d in _parse(raw):
-        f = _to_finding(d, v)
-        if f is None or (f.topic, f.kind) in taken:
-            continue
-        taken.add((f.topic, f.kind))
-        out.append(f)
-        if len(out) >= MAX_FINDINGS:
-            break
+
+    for sf in _semantic_ai_findings(v):
+        if (sf.topic, sf.kind) not in taken:
+            taken.add((sf.topic, sf.kind))
+            out.append(sf)
+
+    try:
+        raw = llm.complete(SYSTEM, build_prompt(v, rule_findings))
+        for d in _parse(raw):
+            f = _to_finding(d, v)
+            if f is None or (f.topic, f.kind) in taken:
+                continue
+            taken.add((f.topic, f.kind))
+            out.append(f)
+            if len(out) >= MAX_FINDINGS:
+                break
+    except Exception:
+        if not out:
+            raise
     return out

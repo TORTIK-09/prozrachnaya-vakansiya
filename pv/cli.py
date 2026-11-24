@@ -27,22 +27,22 @@ def get_analyzer():
 
 
 def make_llm(cfg: config_mod.Config, enabled: bool) -> LLM | None:
-    """Клиент модели из настроек. Нет модуля, настроек или связи — работаем на одних правилах и говорим об этом."""
+    """Клиент модели из настроек. Нет модуля, настроек или связи — работаем на системном AI и говорим об этом."""
     if not enabled:
-        log("модель отключена флагом --no-llm: работают только правила")
+        log("модель отключена флагом --no-llm: работает только системный AI")
         return None
     try:
         from . import llm as llm_mod
     except ImportError:
-        log("клиент модели (pv/llm.py) ещё не подключён: работают только правила")
+        log("клиент модели (pv/llm.py) ещё не подключён: работает только системный AI")
         return None
     try:
         client = llm_mod.from_config(cfg)
     except Exception as e:
-        log(f"модель недоступна ({type(e).__name__}: {e}): работают только правила")
+        log(f"модель недоступна ({type(e).__name__}: {e}): работает только системный AI")
         return None
     if client is None:
-        log("модель не подключена: работают только правила")
+        log("модель не подключена: работает только системный AI")
         return None
     from .analyze import profile
     info = client.describe()
@@ -174,7 +174,7 @@ def cmd_calibrate(cfg: config_mod.Config) -> int:
     path = calibrate.save(result, cfg.reports)
     for st in result["sets"]:
         m = st["modes"]
-        log(f"{st['title']}: правила {m['rules']['must_found']}/{m['rules']['must_total']}, "
+        log(f"{st['title']}: системный AI {m['rules']['must_found']}/{m['rules']['must_total']}, "
             f"модель {m['llm']['must_found']}/{m['llm']['must_total']}, вместе {m['both']['must_found']}/{m['both']['must_total']}; "
             f"лишних: {m['rules']['extra_total']} / {m['llm']['extra_total']} / {m['both']['extra_total']}")
     log(f"отключено видов замечаний модели: {len(result['blocked'])}; профиль: {path}")
@@ -222,14 +222,14 @@ def main(argv: list[str] | None = None) -> int:
     p_sched = sub.add_parser("schedule", help="работать постоянно и запускать рабочий режим по расписанию")
     p_web = sub.add_parser("web", help="веб-панель для просмотра отчёта")
     p_web.add_argument("--port", type=int, help="порт (иначе из настроек, по умолчанию 8085)")
-    sub.add_parser("calibrate", help="настроить подключённую модель под задачу и сравнить её с правилами")
+    sub.add_parser("calibrate", help="настроить подключённую модель под задачу и сравнить её с системным AI")
     p_res = sub.add_parser("resume", help="свой сценарий: черновик резюме под вакансию из отчёта")
     p_res.add_argument("--resume", default="RES-01", help="ID резюме из examples/sample_resumes.json")
     p_res.add_argument("--vacancy", required=True, help="ID вакансии из отчёта")
     p_res.add_argument("--report", default="reports/check.json", help="отчёт, из которого берётся вакансия")
     p_res.add_argument("--out", help="куда записать черновик (иначе — на экран)")
     for p in (p_run, p_check, p_sched):
-        p.add_argument("--no-llm", action="store_true", help="не обращаться к модели, только правила")
+        p.add_argument("--no-llm", action="store_true", help="не обращаться к внешней модели, только системный AI")
     a = ap.parse_args(argv)
 
     try:

@@ -30,7 +30,7 @@
     <input type="file" id="file" accept=".json,application/json" hidden>
   </span>
   <span id="actionsLatest" style="display:none">
-    <label class="field">не больше <input type="number" id="maxV" min="1" max="5000" value="200"> вакансий</label>
+    <label class="field">не больше <input type="number" id="maxV" min="1" max="5000" value="200"> вакансий <span class="note" id="chunkHint"></span></label>
     <button class="btn primary" id="btnRun"><span class="spin"></span>Загрузить с портала</button>
   </span>
   <a class="btn" id="jsonLink" href="/api/report?kind=check" target="_blank" rel="noopener">JSON отчёта</a>
@@ -210,7 +210,7 @@ function auditView(v) {
   }));
   const list = fs.length ? fs.map((f, i) => el("article", {class: "finding " + f.kind, "data-f": i, onmouseenter: () => document.querySelectorAll('mark[data-f="' + i + '"]').forEach(n => n.classList.add("active")), onmouseleave: () => document.querySelectorAll("mark.active").forEach(n => n.classList.remove("active"))},
       el("div", {class: "f-top"}, el("span", {class: "kind " + f.kind, text: KINDS[f.kind] || f.kind}), el("span", {class: "f-topic", text: TOPICS[f.topic] || f.topic}),
-        el("span", {class: "src" + (f.source === "llm" ? " llm" : ""), title: f.source === "llm" ? "Замечание нашла модель" : "Замечание найдено правилом", text: f.source === "llm" ? "модель" : "правило"})),
+        el("span", {class: "src" + (f.source === "llm" ? " llm" : ""), title: f.source === "llm" ? "Замечание нашла модель" : "Замечание найдено системным AI", text: f.source === "llm" ? "модель" : "системный AI"})),
       el("div", {text: f.problem}),
       f.quote ? el("div", {class: "quote"}, el("small", {title: "Поле источника: " + f.field, text: fieldName(f.field)}), "«" + f.quote + "»") : el("div", {class: "quote"}, el("small", {title: "Поле источника: " + f.field, text: fieldName(f.field)}), el("span", {class: "gap-flag", text: "поле пустое"})),
       f.conflict_with ? [el("div", {class: "vs", text: "ПРОТИВ"}), el("div", {class: "quote"}, el("small", {title: "Поле источника: " + f.conflict_with.field, text: fieldName(f.conflict_with.field)}), "«" + f.conflict_with.quote + "»")] : null,
@@ -248,14 +248,24 @@ function resumeView(v) {
   return box;
 }
 
+let runPollActive = false;
+
 async function loadReport() {
-  banner("");
+  if (!runPollActive) banner("");
   $("jsonLink").href = "/api/report?kind=" + S.kind;
-  try { setReport(await api("/api/report?kind=" + S.kind)); }
-  catch { S.report = null; S.sel = null; render(); }
+  try {
+    setReport(await api("/api/report?kind=" + S.kind));
+  } catch {
+    if (!runPollActive) {
+      S.report = null;
+      S.sel = null;
+      render();
+    }
+  }
 }
 function switchKind(kind) {
   S.kind = kind; S.fKind = null; S.fTopic = null; S.q = ""; $("q").value = "";
+  try { localStorage.setItem("pv-active-kind", kind); } catch {}
   $("segCheck").setAttribute("aria-pressed", String(kind === "check")); $("segLatest").setAttribute("aria-pressed", String(kind === "latest"));
   $("actionsCheck").style.display = kind === "check" ? "contents" : "none"; $("actionsLatest").style.display = kind === "latest" ? "contents" : "none";
   loadReport();
@@ -267,23 +277,127 @@ $("q").oninput = e => { S.q = e.target.value; renderList(); };
 $("btnSample").onclick = e => busy(e.currentTarget, async () => { banner(""); setReport(await api("/api/check-sample", {method: "POST"})); });
 $("btnUpload").onclick = () => $("file").click();
 $("file").onchange = e => { const f = e.target.files[0]; if (!f) return; busy($("btnUpload"), async () => { banner(""); setReport(await api("/api/check?name=" + encodeURIComponent(f.name), {method: "POST", headers: {"Content-Type": "application/json"}, body: await f.text()})); }); e.target.value = ""; };
-$("btnRun").onclick = e => busy(e.currentTarget, async () => { banner("Загружаю вакансии с портала — страница из ста вакансий приходит около 15 секунд…", true); setReport(await api("/api/run?max_vacancies=" + encodeURIComponent($("maxV").value || 200), {method: "POST"})); banner(""); });
+function calcDynamicChunks(total) {
+  const n = Math.max(1, Number(total) || 1);
+  let size = 500, parallel = 64;
+  if (n <= 20) { size = n; parallel = 4; }
+  else if (n <= 100) { size = 25; parallel = 8; }
+  else if (n <= 300) { size = 50; parallel = 16; }
+  else if (n <= 1000) { size = 100; parallel = 32; }
+  else { size = 500; parallel = 64; }
+  const chunks = Math.ceil(n / size);
+  return {size, chunks, parallel};
+}
+function updateChunkHint() {
+  const hint = $("chunkHint");
+  if (!hint) return;
+  const n = Math.max(1, Number($("maxV").value || 200));
+  try { localStorage.setItem("pv-max-v", String(n)); } catch {}
+  const {size, chunks, parallel} = calcDynamicChunks(n);
+  hint.textContent = chunks > 1 ? `(${chunks} ${plural(chunks, "чанк", "чанка", "чанков")} по ~${size} шт. · параллельно: ${parallel} шт.)` : `(1 чанк · параллельно: ${parallel} шт.)`;
+}
+$("maxV").oninput = updateChunkHint;
+updateChunkHint();
+
+async function pollRunJob() {
+  if (runPollActive) return;
+  runPollActive = true;
+  const btn = $("btnRun");
+  btn.classList.add("busy");
+  btn.disabled = true;
+  let lastChunk = -1;
+  try {
+    while (true) {
+      let st = null;
+      try { st = await api("/api/run-status"); } catch { /* повторим через 1.5 с */ }
+      if (st) {
+        if (st.state === "running") {
+          banner(st.message || "Идёт загрузка и пакетная обработка по чанкам…", true);
+          if (st.chunk_done > 0 && st.chunk_done !== lastChunk && S.kind === "latest") {
+            lastChunk = st.chunk_done;
+            try { setReport(await api("/api/report?kind=latest")); } catch { /* промежуточный отчёт */ }
+          }
+        } else if (st.state === "done") {
+          if (S.kind === "latest") {
+            try { setReport(await api("/api/report?kind=latest")); } catch {}
+          }
+          banner("");
+          break;
+        } else if (st.state === "failed") {
+          banner(st.error || st.message || "Ошибка загрузки с портала");
+          if (S.kind === "latest") {
+            try { setReport(await api("/api/report?kind=latest")); } catch {}
+          }
+          break;
+        } else {
+          banner("");
+          break;
+        }
+      }
+      await new Promise(r => setTimeout(r, 1200));
+    }
+  } finally {
+    runPollActive = false;
+    btn.classList.remove("busy");
+    btn.disabled = false;
+  }
+}
+
+$("btnRun").onclick = async () => {
+  if (runPollActive) return;
+  const n = Math.max(1, Number($("maxV").value || 200));
+  const {size, chunks, parallel} = calcDynamicChunks(n);
+  const chunkNote = chunks > 1 ? ` Динамическое разбиение: ${chunks} ${plural(chunks, "чанк", "чанка", "чанков")} по ~${size} шт. · параллельно: ${parallel} шт.` : ` (1 чанк · параллельно: ${parallel} шт.)`;
+  banner("Запускаю загрузку с портала…" + chunkNote, true);
+  try {
+    await api("/api/run?max_vacancies=" + encodeURIComponent(n) + "&bg=1", {method: "POST"});
+    await pollRunJob();
+  } catch (e) {
+    banner(e.message);
+  }
+};
 $("themeBtn").onclick = () => { const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches; const t = dark ? "light" : "dark"; document.documentElement.dataset.theme = t; try { localStorage.setItem("pv-theme", t); } catch { /* без хранилища */ } };
 try { const t = localStorage.getItem("pv-theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch { /* без хранилища */ }
 
 (async () => {
+  let savedKind = "check";
+  let savedMaxV = null;
+  try {
+    savedKind = localStorage.getItem("pv-active-kind") || "check";
+    savedMaxV = localStorage.getItem("pv-max-v");
+  } catch {}
+
   try {
     const st = await api("/api/status");
     const chip = $("modelChip");
-    chip.lastElementChild.textContent = st.model ? "модель: " + st.model.model + " (" + st.model.provider + ")" : "модель не подключена — работают правила";
+    chip.lastElementChild.textContent = st.model ? "модель: " + st.model.model + " (" + st.model.provider + ") ⚙" : "модель не подключена — работает системный AI ⚙";
     chip.classList.toggle("on", !!st.model);
-    $("maxV").value = st.max_vacancies;
+    $("maxV").value = savedMaxV || st.max_vacancies;
+    updateChunkHint();
     if (st.last_error) banner("Последняя загрузка с портала не удалась: " + st.last_error.error + ". Показан последний успешный отчёт.");
   } catch { /* статус необязателен */ }
   try { S.resumes = await api("/api/resumes"); S.resumeId = (S.resumes[0] || {}).id || null; } catch { /* без сценария */ }
+
+  let isRunningNow = false;
+  try {
+    const rs = await api("/api/run-status");
+    if (rs && rs.state === "running") {
+      isRunningNow = true;
+      savedKind = "latest";
+      if (rs.total) {
+        $("maxV").value = rs.total;
+        updateChunkHint();
+      }
+    }
+  } catch {}
+
   watchCalibration();
-  await loadReport();
-  if (!S.report && S.kind === "check") $("btnSample").click();
+  switchKind(savedKind === "latest" ? "latest" : "check");
+  if (isRunningNow) {
+    pollRunJob();
+  } else if (!S.report && S.kind === "check") {
+    $("btnSample").click();
+  }
 })();
 </script>
 </body>

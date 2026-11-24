@@ -38,11 +38,17 @@ def analyze(v: Vacancy, llm: LLM | None = None, mode: str = "both") -> list[Find
     if mode == "rules" or llm is None:
         return _sorted(found)
     try:
-        llm_found = ai.find(v, llm)
-    except Exception:
-        return _sorted(found)      # модель недоступна или ответила мусором: остаются замечания правил
-    try:
         info = llm.describe() or {}
     except Exception:
         info = {}
+    if info.get("mode_type") in ("local_only", "custom_api_only"):
+        try:
+            llm_only = ai.find(v, llm)
+            return _sorted(llm_only) if llm_only else _sorted(found)
+        except Exception:
+            return _sorted(found)
+    try:
+        llm_found = ai.find(v, llm, rule_findings=found)
+    except Exception:
+        return _sorted(found)      # модель недоступна или ответила мусором: остаются замечания правил
     return merge(found, llm_found, profile.blocked(profile.cached(info)))

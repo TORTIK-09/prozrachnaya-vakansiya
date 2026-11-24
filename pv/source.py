@@ -84,14 +84,76 @@ def fetch_api(cfg: Config, client: httpx.Client | None = None,
     """Рабочий режим: страницы API, пока не набран лимит или не кончились данные.
 
     `offset` в этом API — номер страницы, `limit` — её размер (не больше 100).
+    При большом запросе страницы загружаются параллельно несколькими потоками.
     """
+    from concurrent.futures import ThreadPoolExecutor
+
     own = client is None
-    client = client or httpx.Client(headers={"User-Agent": "prozrachnaya-vakansiya/0.1"}, follow_redirects=True)
+    limits = httpx.Limits(max_connections=20, max_keepalive_connections=12)
+    client = client or httpx.Client(
+        headers={"User-Agent": "prozrachnaya-vakansiya/0.1"},
+        follow_redirects=True,
+        limits=limits,
+    )
     try:
         out: list[dict] = []
         seen: set[str] = set()
         limit = min(cfg.page_size, 100)
-        page, total = 0, None
+
+        # Загружаем первую страницу, чтобы узнать общее число вакансий (meta.total)
+        body0 = _get_page(client, cfg, 0, limit, sleep)
+        meta = body0.get("meta") if isinstance(body0.get("meta"), dict) else {}
+        total = None
+        try:
+            total = int(meta.get("total")) if meta.get("total") is not None else None
+        except (TypeError, ValueError):
+            pass
+        items0 = extract(body0)
+        log(f"страница 1: получено {len(items0)}" + (f" из {total}" if total is not None else ""))
+        for v in items0:
+            vid = str(v.get("id") or "")
+            if vid and vid in seen:
+                continue
+            seen.add(vid)
+            out.append(v)
+            if len(out) >= cfg.max_vacancies:
+                return out
+
+        if not items0 or len(items0) < limit:
+            return out
+
+        target = min(cfg.max_vacancies, total) if total is not None else cfg.max_vacancies
+        pages_needed = (target + limit - 1) // limit
+
+        # Если запущено в реальном режиме (own=True) и нужно больше 2 страниц — качаем страницы параллельно
+        if own and pages_needed > 2:
+            fetch_workers = min(10, max(2, pages_needed - 1))
+            log(f"параллельная загрузка страниц 2..{pages_needed} (потоков: {fetch_workers})")
+
+            def _fetch_p(p_idx: int) -> tuple[int, list[dict]]:
+                b = _get_page(client, cfg, p_idx, limit, sleep)
+                its = extract(b)
+                log(f"страница {p_idx + 1}/{pages_needed}: получено {len(its)}")
+                return p_idx, its
+
+            with ThreadPoolExecutor(max_workers=fetch_workers) as pool:
+                page_results = list(pool.map(_fetch_p, range(1, pages_needed)))
+
+            for _, items in sorted(page_results, key=lambda x: x[0]):
+                if not items:
+                    break
+                for v in items:
+                    vid = str(v.get("id") or "")
+                    if vid and vid in seen:
+                        continue
+                    seen.add(vid)
+                    out.append(v)
+                    if len(out) >= cfg.max_vacancies:
+                        return out
+            return out
+
+        # Последовательная докачка (для малых запросов и модульных тестов)
+        page = 1
         while len(out) < cfg.max_vacancies:
             if total is not None and page * limit >= total:
                 break

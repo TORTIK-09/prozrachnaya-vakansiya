@@ -74,12 +74,68 @@ def _dedup(findings: list[Finding]) -> list[Finding]:
     return out
 
 
+def dynamic_chunk_plan(total_count: int) -> tuple[int, int]:
+    """Динамически рассчитывает размер чанка и количество чанков в зависимости от общего числа вакансий."""
+    if total_count <= 0:
+        return 1, 0
+    if total_count <= 20:
+        chunk_size = total_count
+    elif total_count <= 100:
+        chunk_size = 25
+    elif total_count <= 300:
+        chunk_size = 50
+    elif total_count <= 1000:
+        chunk_size = 100
+    else:
+        chunk_size = 500
+    total_chunks = (total_count + chunk_size - 1) // chunk_size
+    return chunk_size, total_chunks
+
+
+def dynamic_parallel_workers(total_count: int, base_workers: int = 4) -> int:
+    """Динамически рассчитывает число параллельно обрабатываемых вакансий от общего объёма."""
+    if total_count <= 20:
+        target = 4
+    elif total_count <= 100:
+        target = 8
+    elif total_count <= 300:
+        target = 16
+    elif total_count <= 1000:
+        target = 32
+    else:
+        target = 64
+    return max(1, base_workers, target)
+
+
+def _build_entries(vacancies_slice: list[Vacancy], results_slice: list[tuple[list[Finding], str | None, bool, int]],
+                   base_stats: dict) -> tuple[list[dict], dict]:
+    st = dict(base_stats)
+    entries = []
+    for v, (found, error, cached, rejected) in zip(vacancies_slice, results_slice):
+        entry: dict[str, Any] = {"id": v.id, "url": v.url, "title": v.title, "company": v.company,
+                                 "findings": [f.to_json() for f in found],
+                                 "fields": {f: v.text_of(f) for f in SOURCE_FIELDS if v.text_of(f)}}
+        if error:
+            entry["error"] = error
+            st["analyzer_errors"] += 1
+        st["from_cache"] += int(cached)
+        st["rejected_findings"] += rejected
+        st["findings"] += len(found)
+        st["with_findings"] += int(bool(found))
+        entries.append(entry)
+    st["vacancies"] = len(entries)
+    return entries, st
+
+
 def analyze_all(raw_items: list[Any], analyze: Analyze, llm: LLM | None, workers: int = 4,
                 cache: Cache | None = None, salt: str = "",
-                log: Callable[[str], None] = lambda s: None) -> tuple[list[dict], dict]:
+                log: Callable[[str], None] = lambda s: None,
+                on_progress: Callable[[int, int, int, int], None] | None = None,
+                on_chunk_done: Callable[[list[dict], dict, int, int], None] | None = None) -> tuple[list[dict], dict]:
     """Возвращает записи отчёта (по одной на ID, в порядке входных данных) и статистику."""
     stats = {"input": len(raw_items), "vacancies": 0, "with_findings": 0, "findings": 0, "skipped_no_id": 0,
-             "duplicates": 0, "from_cache": 0, "rejected_findings": 0, "analyzer_errors": 0}
+             "duplicates": 0, "from_cache": 0, "rejected_findings": 0, "analyzer_errors": 0,
+             "chunk_size": 0, "chunks": 0}
     vacancies: list[Vacancy] = []
     seen: set[str] = set()
     for raw in raw_items:
@@ -94,41 +150,92 @@ def analyze_all(raw_items: list[Any], analyze: Analyze, llm: LLM | None, workers
     if stats["skipped_no_id"]:
         log(f"пропущено записей без ID: {stats['skipped_no_id']}")
 
+    import threading
+    cache_lock = threading.Lock()
+    done_count = 0
+    total_count = len(vacancies)
+    chunk_size, total_chunks = dynamic_chunk_plan(total_count)
+    effective_workers = dynamic_parallel_workers(total_count, workers)
+    stats["chunk_size"] = chunk_size if total_count else 0
+    stats["chunks"] = total_chunks
+    stats["parallel_workers"] = effective_workers
+    current_chunk_idx = 1
+    chunk_llm_calls = 0
+    # В больших пакетах (> 30 вакансий) ограничиваем число долгих GPU-вызовов на чанк одной параллельной волной,
+    # а остальные вакансии чанка обрабатываем в 16–64 потока через обученный профиль + правила без очереди
+    max_llm_per_chunk = total_count if total_count <= 30 else 4
+
     def one(v: Vacancy) -> tuple[list[Finding], str | None, bool, int]:
+        nonlocal done_count, chunk_llm_calls
         fp = fingerprint(v, salt)
         if cache is not None:
-            hit = cache.get(v.id, fp)
+            with cache_lock:
+                hit = cache.get(v.id, fp)
             if hit is not None:
+                with cache_lock:
+                    done_count += 1
+                    dc = done_count
+                if on_progress:
+                    on_progress(dc, total_count, current_chunk_idx, total_chunks)
                 return hit, None, True, 0
+
+        use_llm = llm
+        if llm is not None and total_count > 30:
+            with cache_lock:
+                if chunk_llm_calls < max_llm_per_chunk:
+                    chunk_llm_calls += 1
+                else:
+                    use_llm = None
+
         try:
-            result = analyze(v, llm)
+            result = analyze(v, use_llm)
             found = list(result) if result is not None else []
         except Exception as e:  # сбой на одной вакансии не должен ронять весь прогон
+            with cache_lock:
+                done_count += 1
+                dc = done_count
+            if on_progress:
+                on_progress(dc, total_count, current_chunk_idx, total_chunks)
             return [], f"{type(e).__name__}: {e}"[:300], False, 0
         good = [f for f in found if isinstance(f, Finding) and not validate(f, v)]
         good = _dedup(good)
-        if cache is not None:
-            cache.put(v.id, fp, good)
+        with cache_lock:
+            done_count += 1
+            dc = done_count
+            if cache is not None:
+                cache.put(v.id, fp, good)
+                if dc % 50 == 0:
+                    cache.save(keep=seen)
+            if total_count > 10 and (dc % 50 == 0 or dc == total_count):
+                log(f"  обработано {dc} из {total_count} (параллельно: {effective_workers} шт.)")
+        if on_progress:
+            on_progress(dc, total_count, current_chunk_idx, total_chunks)
         return good, None, False, len(found) - len(good)
 
-    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
-        results = list(pool.map(one, vacancies))
+    results: list[tuple[list[Finding], str | None, bool, int]] = []
+    if total_chunks > 1:
+        log(f"динамическое разбиение ({total_count} вакансий): {total_chunks} чанк(ов) по ~{chunk_size} шт. · параллельно: {effective_workers} шт.")
+        for c_idx, start in enumerate(range(0, total_count, chunk_size), start=1):
+            current_chunk_idx = c_idx
+            with cache_lock:
+                chunk_llm_calls = 0
+            chunk = vacancies[start : start + chunk_size]
+            log(f"чанк {c_idx}/{total_chunks}: параллельная обработка {len(chunk)} вакансий ({effective_workers} потоков) [{start + 1}..{start + len(chunk)}]")
+            with ThreadPoolExecutor(max_workers=effective_workers) as pool:
+                chunk_results = list(pool.map(one, chunk))
+            results.extend(chunk_results)
+            if cache is not None:
+                with cache_lock:
+                    cache.save(keep=seen)
+            log(f"чанк {c_idx}/{total_chunks} завершён: готово {len(results)} из {total_count}")
+            if on_chunk_done:
+                part_entries, part_stats = _build_entries(vacancies[: len(results)], results, stats)
+                on_chunk_done(part_entries, part_stats, c_idx, total_chunks)
+    else:
+        with ThreadPoolExecutor(max_workers=effective_workers) as pool:
+            results = list(pool.map(one, vacancies))
 
-    entries = []
-    for v, (found, error, cached, rejected) in zip(vacancies, results):
-        entry: dict[str, Any] = {"id": v.id, "url": v.url, "title": v.title, "company": v.company,
-                                 "findings": [f.to_json() for f in found],
-                                 # значения полей источника: по ним редактор видит цитаты в контексте
-                                 "fields": {f: v.text_of(f) for f in SOURCE_FIELDS if v.text_of(f)}}
-        if error:
-            entry["error"] = error
-            stats["analyzer_errors"] += 1
-        stats["from_cache"] += int(cached)
-        stats["rejected_findings"] += rejected
-        stats["findings"] += len(found)
-        stats["with_findings"] += int(bool(found))
-        entries.append(entry)
-    stats["vacancies"] = len(entries)
+    entries, stats = _build_entries(vacancies, results, stats)
     if cache is not None:
         cache.save(keep=seen)
     return entries, stats

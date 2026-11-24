@@ -17,7 +17,7 @@ class Config:
     page_size: int = 100             # больше 100 API не отдаёт
     timeout: float = 60.0            # секунд на один запрос к API
     retries: int = 3
-    workers: int = 4                 # потоков анализа
+    workers: int = 6                 # потоков параллельного анализа (под параллельные слоты GPU)
     reports_dir: str = "reports"
     llm_base_url: str = ""
     llm_model: str = ""

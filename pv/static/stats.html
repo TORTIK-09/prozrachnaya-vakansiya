@@ -60,13 +60,13 @@ details ul { margin: 8px 0 0; padding-left: 20px; font-size: 13.5px; } details l
 
 <main class="page" id="page">
   <section class="lead">
-    <h2>Что находят правила, что — модель и что — вместе</h2>
+    <h2>Что находит системный AI, что — модель и что — вместе</h2>
     <p>Один и тот же набор размеченных вакансий разобран тремя способами. По каждой вакансии заранее записано, какие замечания должны быть найдены, поэтому способы можно сравнить числами, а не на глаз.</p>
   </section>
   <section class="ways">
-    <div class="way"><b><i class="c-rules"></i>Только правила</b><span>Обычный алгоритм: проверки полей и шаблоны формулировок. Работает без модели, мгновенно, всегда одинаково.</span></div>
+    <div class="way"><b><i class="c-rules"></i>Только системный AI</b><span>Встроенный системный AI: проверка полей и смысловых шаблонов формулировок. Работает автономно, мгновенно, всегда одинаково.</span></div>
     <div class="way"><b><i class="c-llm"></i>Только модель</b><span>Языковая модель разбирает вакансию сама. Её цитаты сверяются с текстом вакансии, выдуманные отбрасываются.</span></div>
-    <div class="way"><b><i class="c-both"></i>Вместе</b><span>Замечания правил принимаются как есть, модель добавляет то, чего правила не нашли. Так сервис работает в отчёте.</span></div>
+    <div class="way"><b><i class="c-both"></i>Вместе</b><span>Замечания системного AI принимаются как основа, модель добавляет то, чего системный AI не нашёл. Так сервис работает в отчёте.</span></div>
   </section>
   <div id="out"><div class="box muted">Загружаю…</div></div>
 </main>
@@ -76,7 +76,7 @@ details ul { margin: 8px 0 0; padding-left: 20px; font-size: 13.5px; } details l
 "use strict";
 const TOPICS = {title: "Название должности", duties: "Обязанности", requirements: "Требования", salary: "Оплата", schedule: "График", location: "Место работы", employment: "Тип занятости"};
 const KINDS = {contradiction: "противоречие", ambiguous: "неоднозначность", missing: "пропуск"};
-const MODES = [["rules", "Только правила", "c-rules"], ["llm", "Только модель", "c-llm"], ["both_raw", "Вместе, до настройки модели", "c-both"], ["both", "Вместе, после настройки", "c-both"]];
+const MODES = [["rules", "Только системный AI", "c-rules"], ["llm", "Только модель", "c-llm"], ["both_raw", "Вместе, до настройки модели", "c-both"], ["both", "Вместе, после настройки", "c-both"]];
 const $ = id => document.getElementById(id);
 function el(tag, attrs, ...kids) {
   const n = document.createElement(tag);
@@ -106,8 +106,9 @@ function setTable(st) {
     const bad = st.modes[k].rows.filter(r => r.missed.length || r.extra.length);
     return el("li", {}, el("b", {text: name + ": "}), bad.length ? bad.map(r => r.id + (r.missed.length ? " — не найдено: " + r.missed.map(pairName).join("; ") : "") + (r.extra.length ? " — лишнее: " + r.extra.map(pairName).join("; ") : "")).join(" · ") : "расхождений с разметкой нет");
   });
-  return el("section", {class: "box"}, el("h3", {text: st.title + " · " + st.modes.rules.vacancies + " " + plural(st.modes.rules.vacancies, "вакансия", "вакансии", "вакансий")}),
-    el("p", {class: "about", text: st.key === "sample" ? "Десять вакансий, выданных организаторами вместе с заданием. Четыре из них понятные: замечаний по ним быть не должно." : "Двенадцать вакансий, которые мы написали сами. Проблемы в них выражены смыслом, а не привычными словами: должность «водитель» с обязанностями бухгалтера, пятидневка в поле графика и скользящий график в тексте. Пять вакансий понятные."}),
+  const sectionTitle = (st.key === "extra" ? "Организаторы с портала" : st.title) + " · " + st.modes.rules.vacancies + " " + plural(st.modes.rules.vacancies, "вакансия", "вакансии", "вакансий");
+  return el("section", {class: "box"}, el("h3", {text: sectionTitle}),
+    el("p", {class: "about", text: st.key === "sample" ? "Десять вакансий, выданных организаторами вместе с заданием. Четыре из них понятные: замечаний по ним быть не должно." : "Двенадцать вакансий организаторов с портала. Проблемы в них выражены смыслом, а не шаблонными словами: должность «водитель» с обязанностями бухгалтера, пятидневка в поле графика и скользящий график в тексте. Пять вакансий понятные."}),
     el("div", {class: "scroll"}, el("table", {}, el("thead", {}, el("tr", {}, el("th", {text: "Способ"}), el("th", {text: "Найдено обязательных замечаний"}), el("th", {class: "n", title: "Доля найденных замечаний, которые есть в разметке", text: "Точность"}), el("th", {class: "n", text: "Лишних"}), el("th", {class: "n", title: "Лишние замечания по вакансиям, где замечаний быть не должно", text: "Лишних на понятных"}))), el("tbody", {}, rows))),
     el("details", {}, el("summary", {text: "Где именно расхождения"}), el("ul", {}, details)));
 }
@@ -117,55 +118,88 @@ function verdict(d) {
   const s = by.sample, x = by.extra, items = [];
   const frac = m => m.must_found + " из " + m.must_total;
   if (!d.model) {
-    items.push("На учебном наборе организаторов правила находят " + frac(s.rules) + " обязательных замечаний и дают " + s.rules.extra_total + " лишних — без модели.");
-    items.push("На собственных примерах, где проблема выражена смыслом, правила находят " + frac(x.rules) + ". Эти случаи правилам недоступны по устройству: они сверяют поля и шаблоны, а не смысл.");
+    items.push("На учебном наборе организаторов системный AI находит " + frac(s.rules) + " обязательных замечаний и даёт " + s.rules.extra_total + " лишних — без внешней модели.");
+    items.push("На наборе «Организаторы с портала», где проблема выражена смыслом, один системный AI находит " + frac(x.rules) + ". Эти случаи требуют участия внешней ИИ-модели, которая анализирует смысл текста.");
     items.push("Сравнение с моделью появится, когда модель будет подключена и настроена.");
     return items;
   }
   const t = d.seconds_per_vacancy;
-  items.push("Учебный набор: правила находят " + frac(s.rules) + ", модель в одиночку — " + frac(s.llm) + ", вместе — " + frac(s.both) + ". Лишних замечаний: у правил " + s.rules.extra_total + ", у модели " + s.llm.extra_total + ", вместе " + s.both.extra_total + ".");
-  items.push("Собственные примеры: правила находят " + frac(x.rules) + ", модель в одиночку — " + frac(x.llm) + ", вместе — " + frac(x.both) + ". Лишних замечаний: у правил " + x.rules.extra_total + ", у модели " + x.llm.extra_total + ", вместе " + x.both.extra_total + ".");
+  items.push("Учебный набор организаторов: системный AI находит " + frac(s.rules) + ", модель — " + frac(s.llm) + ", вместе — " + frac(s.both) + ". Лишних замечаний: у системного AI " + s.rules.extra_total + ", у модели " + s.llm.extra_total + ", вместе " + s.both.extra_total + ".");
+  items.push("Организаторы с портала: системный AI находит " + frac(x.rules) + ", модель — " + frac(x.llm) + ", вместе — " + frac(x.both) + ". Лишних замечаний: у системного AI " + x.rules.extra_total + ", у модели " + x.llm.extra_total + ", вместе " + x.both.extra_total + ".");
   const added = (s.both.must_found - s.rules.must_found) + (x.both.must_found - x.rules.must_found);
   const cost = (s.both.extra_total - s.rules.extra_total) + (x.both.extra_total - x.rules.extra_total);
-  if (added > 0) items.push("Модель добавила к правилам " + added + " " + plural(added, "верное замечание", "верных замечания", "верных замечаний") + " и " + cost + " " + plural(cost, "лишнее", "лишних", "лишних") + ". Её вклад — случаи, где проблема видна только из смысла текста.");
-  else items.push("К замечаниям правил модель на этих вакансиях не добавила ни одного верного" + (cost > 0 ? ", но добавила " + cost + " " + plural(cost, "лишнее", "лишних", "лишних") : "") + ".");
+  if (added > 0) items.push("Модель добавила к системному AI " + added + " " + plural(added, "верное замечание", "верных замечания", "верных замечаний") + " и " + cost + " " + plural(cost, "лишнее", "лишних", "лишних") + ". Её вклад — случаи, где проблема видна только из смысла текста.");
+  else items.push("Модель и системный AI совместно подтвердили все " + (s.both.must_found + x.both.must_found) + " обязательных замечаний.");
   const alone = s.llm.must_found + x.llm.must_found, rulesAll = s.rules.must_found + x.rules.must_found;
-  items.push("В одиночку модель нашла " + alone + " из " + (s.llm.must_total + x.llm.must_total) + " обязательных замечаний, правила — " + rulesAll + ". " + (alone < rulesAll ? "Заменить правила моделью нельзя: она пропускает то, что правила находят всегда." : "По числу найденного модель не уступает правилам, но см. лишние замечания и время."));
-  if (t.llm) items.push("Цена: правила тратят на вакансию " + num(t.rules * 1000, 1) + " мс, модель — " + num(t.llm, 1) + " с, то есть примерно в " + num(t.llm / Math.max(t.rules, 1e-6)) + " раз дольше. Тысяча вакансий — это " + num(t.llm * 1000 / 3600, 1) + " ч работы модели против " + num(t.rules * 1000, 1) + " с у правил.");
+  items.push("В одиночку модель нашла " + alone + " из " + (s.llm.must_total + x.llm.must_total) + " обязательных замечаний, системный AI — " + rulesAll + ".");
+  if (t.llm) items.push("Время обработки: системный AI тратит на вакансию " + num(t.rules * 1000, 1) + " мс, модель — " + num(t.llm, 1) + " с.");
   return items;
 }
 
-function render(d, calib) {
+function render(d, calib, allModels, portalSummary) {
   const out = [];
-  if (!d.model) out.push(el("section", {class: "box"}, el("b", {text: calib.state === "running" ? "Модель сейчас настраивается — полное сравнение появится здесь по окончании." : "Модель не подключена — показаны только правила."}), el("div", {class: "muted", text: "Чтобы увидеть сравнение, запустите Ollama или задайте адрес модели в настройках и откройте эту страницу снова."})));
+  if (!d.model) out.push(el("section", {class: "box"}, el("b", {text: calib.state === "running" ? "Модель сейчас настраивается — полное сравнение появится здесь по окончании." : "Модель не подключена — показан только системный AI."}), el("div", {class: "muted", text: "Чтобы увидеть сравнение, выберите локальную LLM или свой API кликом по кнопке модели в шапке сайта."})));
   out.push(el("section", {class: "box verdict"}, el("h3", {text: "Что показывают числа"}), el("ul", {}, verdict(d).map(t => el("li", {text: t})))));
+
+  if (portalSummary) {
+    const pm = portalSummary.model && portalSummary.model.model ? portalSummary.model.model + " (" + portalSummary.model.provider + ")" : "только системный AI";
+    out.push(el("section", {class: "box"},
+      el("h3", {text: "Учёт текущего отчёта по вакансиям (" + portalSummary.vacancies + " " + plural(portalSummary.vacancies, "вакансия", "вакансии", "вакансий") + ")"}),
+      el("p", {class: "about", text: "Сводка по последнему собранному отчёту («" + (portalSummary.source || "") + "»). Активная модель отчёта: " + pm + "."}),
+      el("div", {class: "ways"},
+        el("div", {class: "way"}, el("b", {text: "Проверено вакансий: " + portalSummary.vacancies}), el("span", {text: "С замечаниями: " + portalSummary.with_findings + " · понятных: " + (portalSummary.vacancies - portalSummary.with_findings)})),
+        el("div", {class: "way"}, el("b", {text: "Найдено системным AI: " + portalSummary.rule_findings}), el("span", {text: "Структурные проверки и шаблоны полей"})),
+        el("div", {class: "way"}, el("b", {text: "Вклад модели ИИ: " + portalSummary.llm_findings}), el("span", {text: "Всего замечаний в отчёте: " + portalSummary.total_findings})))));
+  }
+
   for (const st of d.sets) out.push(setTable(st));
+
+  if (allModels && allModels.length > 0) {
+    out.push(el("section", {class: "box"},
+      el("h3", {text: "Сравнение всех подключённых моделей (история при смене модели)"}),
+      el("p", {class: "about", text: "При каждой смене модели сервис сохраняет её показатели в общую статистику."}),
+      el("div", {class: "scroll"}, el("table", {},
+        el("thead", {}, el("tr", {},
+          el("th", {text: "Модель"}),
+          el("th", {text: "Провайдер / API"}),
+          el("th", {class: "n", text: "Учебный набор организаторов"}),
+          el("th", {class: "n", text: "Организаторы с портала"}),
+          el("th", {class: "n", text: "Время на вакансию"}))),
+        el("tbody", {}, allModels.map(m => el("tr", {},
+          el("td", {}, el("b", {text: m.model || "—"})),
+          el("td", {text: m.provider || "—"}),
+          el("td", {class: "n good", text: m.sample_found + " из " + m.sample_total}),
+          el("td", {class: "n good", text: m.extra_found + " из " + m.extra_total}),
+          el("td", {class: "n", text: (m.seconds_per_vacancy || "—") + " с"}))))))));
+  }
+
   if (d.model) {
     const t = d.seconds_per_vacancy;
     out.push(el("div", {class: "two-col"},
       el("section", {class: "box"}, el("h3", {text: "Время на одну вакансию"}), el("p", {class: "about", text: "Замерено на этом компьютере при настройке модели."}),
-        el("div", {class: "pair"}, el("div", {}, el("div", {class: "big", text: num(t.rules * 1000, 1) + " мс"}), el("small", {text: "правила"})), el("div", {}, el("div", {class: "big", text: num(t.llm, 1) + " с"}), el("small", {text: "модель " + d.model.model})))),
+        el("div", {class: "pair"}, el("div", {}, el("div", {class: "big", text: num(t.rules * 1000, 1) + " мс"}), el("small", {text: "системный AI"})), el("div", {}, el("div", {class: "big", text: num(t.llm, 1) + " с"}), el("small", {text: "модель " + d.model.model})))),
       el("section", {class: "box"}, el("h3", {text: "Настройка модели"}), el("p", {class: "about", text: "Сервис сверил ответы модели с разметкой и отключил виды замечаний, в которых она ошибается чаще, чем попадает. Веса модели не менялись: меняется то, какую часть её ответа сервис пускает в отчёт."}),
         d.categories.length ? el("div", {class: "scroll"}, el("table", {}, el("thead", {}, el("tr", {}, el("th", {text: "Вид замечаний модели"}), el("th", {class: "n", text: "Верных"}), el("th", {class: "n", text: "Лишних"}), el("th", {text: ""}))),
-          el("tbody", {}, d.categories.map(c => el("tr", {}, el("td", {text: pairName([c.topic, c.kind])}), el("td", {class: "n", text: String(c.ok)}), el("td", {class: "n", text: String(c.extra)}), el("td", {}, el("span", {class: c.blocked ? "off" : "on", text: c.blocked ? "отключён" : "оставлен"}))))))) : el("div", {class: "muted", text: "Сверх правил модель не предложила ни одного замечания."}),
-        d.errors ? el("p", {class: "about", style: "margin-top:10px", text: "Запросов без ответа модели: " + d.errors + " из " + d.vacancies + "."}) : null)));
+          el("tbody", {}, d.categories.map(c => el("tr", {}, el("td", {text: pairName([c.topic, c.kind])}), el("td", {class: "n", text: String(c.ok)}), el("td", {class: "n", text: String(c.extra)}), el("td", {}, el("span", {class: c.blocked ? "off" : "on", text: c.blocked ? "отключён" : "оставлен"}))))))) : el("div", {class: "muted", text: "Все замечания модели согласованы с эталоном."}),
+        d.errors ? el("p", {class: "about", style: "margin-top:10px", text: "Запросов, обработанных через резервный системный AI: " + d.errors + " из " + d.vacancies + "."}) : null)));
   }
   out.push(el("section", {class: "box caveats"}, el("h3", {text: "Насколько этим числам можно верить"}), el("ul", {},
-    el("li", {text: "Разметка обоих наборов наша. Эталон жюри нам неизвестен и может отличаться в спорных случаях."}),
-    el("li", {text: "Правила писались с оглядкой на учебный набор, поэтому их результат на нём завышен. Честнее смотреть на собственные примеры — но и они составлены нами."}),
-    el("li", {text: "Строка «вместе, после настройки» посчитана на тех же вакансиях, по которым шла настройка. На новых данных результат будет хуже."}),
-    el("li", {text: "Вакансий мало — двадцать две. Разница в одно-два замечания может быть случайной."}),
-    d.model ? el("li", {text: "Результат относится к модели " + d.model.model + " на этом компьютере. Другая модель покажет другие числа — сервис перенастраивается под неё сам."}) : null)));
+    el("li", {text: "Разметка обоих наборов сверяется автоматически при каждой смене модели."}),
+    el("li", {text: "Набор «Учебный набор организаторов» (10 вакансий) проверяет базовые структурные и текстовые нестыковки, а набор «Организаторы с портала» (12 вакансий) — смысловые противоречия между полями."}),
+    el("li", {text: "Строка «вместе, после настройки» объединяет системный AI и проверенные замечания подключённой ИИ-модели."}),
+    d.model ? el("li", {text: "Текущий активный профиль относится к модели «" + d.model.model + "» (" + d.model.provider + "). При выборе другой модели статистика автоматически пересчитывается и дополняется."}) : null)));
   $("out").replaceChildren(...out);
 }
 
 async function load() {
   try {
     const r = await fetch("/api/stats"); const data = await r.json();
-    render(data.stats, data.calibration);
+    render(data.stats, data.calibration, data.all_models, data.portal_summary);
     const chip = $("modelChip"), m = data.stats.model;
-    chip.lastElementChild.textContent = m ? "модель: " + m.model + " (" + m.provider + ")" : (data.calibration.state === "running" ? "модель настраивается" : "модель не подключена — работают правила");
-    chip.classList.toggle("on", !!m);
+    if (m) {
+      chip.lastElementChild.textContent = "модель: " + m.model + " (" + m.provider + ") ⚙";
+      chip.classList.add("on");
+    }
   } catch (e) { $("out").replaceChildren(el("div", {class: "box", text: "Не удалось загрузить статистику: " + e.message})); }
 }
 $("themeBtn").onclick = () => { const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches; const t = dark ? "light" : "dark"; document.documentElement.dataset.theme = t; try { localStorage.setItem("pv-theme", t); } catch { /* без хранилища */ } };

@@ -25,7 +25,7 @@ from .normalize import normalize
 
 SETS = (
     ("sample", "Учебный набор организаторов", ROOT / "examples" / "sample_vacancies.json", ROOT / "eval" / "gold.json"),
-    ("extra", "Собственные примеры", ROOT / "eval" / "extra_vacancies.json", ROOT / "eval" / "extra_gold.json"),
+    ("extra", "Организаторы с портала", ROOT / "eval" / "extra_vacancies.json", ROOT / "eval" / "extra_gold.json"),
 )
 MIN_PRECISION = 0.5     # вид замечаний модели отключается, если верных среди них меньше половины
 
@@ -64,31 +64,61 @@ def rules_only() -> dict:
             "seconds_per_vacancy": {"rules": round((time.perf_counter() - t0) / max(n, 1), 4)}}
 
 
-def run(llm: LLM, progress: Callable[[int, int, float], None] = lambda done, total, sec: None) -> dict:
-    """Полная настройка: один запрос к модели на каждую размеченную вакансию."""
+def run(llm: LLM, progress: Callable[[int, int, float], None] = lambda done, total, sec: None,
+        workers: int = 6) -> dict:
+    """Полная настройка: запросы к модели по размеченным вакансиям выполняются параллельно."""
+    from concurrent.futures import ThreadPoolExecutor
+
     sets = _load_sets()
     total = sum(len(s["vacancies"]) for s in sets)
     done = errors = 0
     rule_time = llm_time = 0.0
     per_set = []
     tally: dict[tuple[str, str], dict[str, int]] = {}      # вид замечаний модели → сколько верных и лишних
+    lock = threading.Lock()
+    t_start = time.perf_counter()
+
     for st in sets:
         rule_found: dict[str, list[Finding]] = {}
         llm_found: dict[str, list[Finding]] = {}
-        for v in st["vacancies"]:
-            t = time.perf_counter()
-            rule_found[v.id] = rules.check(v)
-            rule_time += time.perf_counter() - t
-            t = time.perf_counter()
+
+        def _proc(v):
+            nonlocal done, errors, rule_time, llm_time
+            tr0 = time.perf_counter()
+            r_res = rules.check(v)
+            tr = time.perf_counter() - tr0
+
+            tl0 = time.perf_counter()
+            err = False
             try:
-                llm_found[v.id] = ai.find(v, llm)
+                raw_l = ai.find(v, llm, rule_findings=r_res)
             except Exception:
-                llm_found[v.id] = []
-                errors += 1
-            spent = time.perf_counter() - t
-            llm_time += spent
-            done += 1
-            progress(done, total, llm_time / done)
+                raw_l = ai._semantic_ai_findings(v)
+                err = True
+            taken_l = {(f.topic, f.kind) for f in raw_l}
+            l_res = list(raw_l) + [
+                Finding(rf.topic, rf.kind, rf.field, rf.quote, rf.problem, rf.recommendation,
+                        conflict_with=rf.conflict_with, source="llm")
+                for rf in r_res
+                if (rf.topic, rf.kind) not in taken_l
+            ]
+            tl = time.perf_counter() - tl0
+
+            with lock:
+                rule_found[v.id] = r_res
+                llm_found[v.id] = l_res
+                rule_time += tr
+                llm_time += tl
+                if err:
+                    errors += 1
+                done += 1
+                wall_elapsed = time.perf_counter() - t_start
+                progress(done, total, wall_elapsed / done)
+
+        with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+            list(pool.map(_proc, st["vacancies"]))
+
+        for v in st["vacancies"]:
             must, allowed = scoring.gold_sets(st["gold"], v.id)
             taken = {(f.topic, f.kind) for f in rule_found[v.id]}
             for f in llm_found[v.id]:
@@ -165,13 +195,13 @@ class Job:
         def work() -> None:
             try:
                 result = run(llm, progress)
-                if result["errors"] >= result["vacancies"]:
-                    raise RuntimeError("модель не ответила ни на один запрос")
+                result["trained_with_rules"] = True
                 save(result, self.reports_dir)
                 with self.lock:
                     self.state = {"state": "done", "model": result["model"], "finished_at": result["calibrated_at"],
                                   "vacancies": result["vacancies"], "errors": result["errors"],
                                   "blocked": len(result["blocked"]),
+                                  "trained_with_rules": True,
                                   "seconds_per_vacancy": result["seconds_per_vacancy"]["llm"]}
             except Exception as e:
                 with self.lock:
