@@ -1,0 +1,26 @@
+{
+  "service": "Прозрачная вакансия (КАНТКОД — Регион 39)",
+  "entry_point": "main.py",
+  "source": {
+    "api_url": "http://opendata.trudvsem.ru/api/v1/vacancies/region/39",
+    "region_code": "3900000000000",
+    "max_vacancies": 20,
+    "page_limit": 10,
+    "min_pages_to_process": 2,
+    "timeout_seconds": 15
+  },
+  "schedule": {
+    "enabled": true,
+    "interval_minutes": 60,
+    "cron_expression": "0 * * * *",
+    "command_scheduled": "python main.py schedule --interval-minutes 60",
+    "command_manual_live": "python main.py live --max-vacancies 20 --page-limit 10",
+    "command_verify": "python main.py verify --input kantkod_sample_vacancies.json --output reports/sample_report.json"
+  },
+  "fault_tolerance": {
+    "deduplicate_by_vacancy_id": true,
+    "preserve_last_successful_report_on_api_error": true,
+    "latest_report_path": "reports/latest_report.json",
+    "last_successful_backup_path": "reports/last_successful_report.json"
+  }
+}

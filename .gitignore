@@ -1,0 +1,17 @@
+# Секретные ключи и локальные переменные окружения
+.env
+.env.local
+
+# Python кэш и виртуальные окружения
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.pytest_cache/
+
+# Логи и временные файлы
+*.log
+.DS_Store
+Thumbs.db

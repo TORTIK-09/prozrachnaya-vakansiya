@@ -1,0 +1,71 @@
+{
+  "name": "КАНТКОД — Прозрачная вакансия (Регион 39)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger-39",
+      "name": "Расписание (Каждый час)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {},
+      "id": "manual-trigger-39",
+      "name": "Ручной запуск",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [220, 480]
+    },
+    {
+      "parameters": {
+        "command": "python main.py live --max-vacancies 20 --page-limit 10"
+      },
+      "id": "execute-analyzer-39",
+      "name": "Запуск анализатора (API Регион 39 + ИИ)",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [520, 380]
+    }
+  ],
+  "connections": {
+    "Расписание (Каждый час)": {
+      "main": [
+        [
+          {
+            "node": "Запуск анализатора (API Регион 39 + ИИ)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ручной запуск": {
+      "main": [
+        [
+          {
+            "node": "Запуск анализатора (API Регион 39 + ИИ)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "n8nVersion": "1.72.0"
+  }
+}
