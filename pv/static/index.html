@@ -144,14 +144,14 @@ a.btn { text-decoration: none; color: var(--ink); }
 .src { margin-left: auto; font-size: 11.5px; color: var(--ink-3); border: 1px solid var(--line); border-radius: 5px; padding: 1px 7px; }
 .src.llm { color: var(--accent); border-color: var(--accent); }
 .quote { margin: 8px 0; padding: 7px 11px; background: var(--sunken); border-radius: 7px; font-size: 13.5px; }
-.quote small { display: block; color: var(--ink-3); font-size: 11.5px; margin-bottom: 1px; }
+.quote small { display: block; color: var(--ink-3); font-size: 12px; margin-bottom: 2px; }
 .vs { text-align: center; color: var(--con); font-size: 11.5px; font-weight: 700; letter-spacing: .08em; margin: -3px 0; }
 .rec { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); display: flex; gap: 10px; align-items: flex-start; }
 .rec p { margin: 0; flex: 1; }
 .rec b { color: var(--accent); font-weight: 650; }
 .copy { border: 1px solid var(--line); background: none; border-radius: 6px; padding: 2px 8px; font-size: 12px; color: var(--ink-2); flex: none; }
 .copy:hover { border-color: var(--ink-3); color: var(--ink); }
-.frow { display: grid; grid-template-columns: 178px 1fr; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line-soft); font-size: 14px; }
+.frow { display: grid; grid-template-columns: 170px 1fr; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line-soft); font-size: 14px; }
 .frow:last-child { border-bottom: 0; }
 .frow dt { color: var(--ink-2); font-size: 13px; }
 .frow dt small { display: block; color: var(--ink-3); font-size: 11px; overflow-wrap: anywhere; }
@@ -234,8 +234,9 @@ mark.active { outline: 2px solid var(--accent); }
 "use strict";
 const TOPICS = {title: "Название должности", duties: "Обязанности", requirements: "Требования", salary: "Оплата", schedule: "График", location: "Место работы", employment: "Тип занятости"};
 const KINDS = {contradiction: "противоречие", ambiguous: "неоднозначность", missing: "пропуск"};
-const FIELD_NAMES = {"job-name": "Название должности", "duty": "Обязанности", "requirements": "Требования", "qualification": "Квалификация", "requirement.education": "Образование", "requirement.experience": "Опыт, лет", "requirement.qualification": "Квалификация (в требованиях)", "salary": "Оплата (текстом)", "salary_min": "Оплата от", "salary_max": "Оплата до", "term.text": "Премии", "benefit": "Льготы", "schedule": "График", "scheduleTypeComment": "Комментарий к графику", "shift": "Смены", "employment": "Тип занятости", "addresses.address[].location": "Адрес", "conditions": "Условия труда"};
+const FIELD_NAMES = {"job-name": "Название должности", "duty": "Обязанности", "requirements": "Требования", "qualification": "Квалификация", "requirement.education": "Образование", "requirement.experience": "Опыт, лет", "requirement.qualification": "Требования к квалификации", "salary": "Оплата", "salary_min": "Оплата от", "salary_max": "Оплата до", "term.text": "Премии", "benefit": "Льготы", "schedule": "График", "scheduleTypeComment": "Комментарий к графику", "shift": "Смены", "employment": "Тип занятости", "addresses.address[].location": "Адрес", "conditions": "Условия труда"};
 const FIELD_ORDER = Object.keys(FIELD_NAMES);
+const fieldName = f => "Поле «" + (FIELD_NAMES[f] || f) + "»";
 const ALWAYS = ["job-name", "duty", "requirements", "salary_min", "salary_max", "schedule", "employment", "addresses.address[].location"];
 const S = {kind: "check", report: null, sel: null, q: "", fKind: null, fTopic: null, tab: "audit", resumes: [], resumeId: null};
 const $ = id => document.getElementById(id);
@@ -376,15 +377,15 @@ function auditView(v) {
   const card = el("dl", {style: "margin:0"}, shown.map(f => {
     const has = fields[f] !== undefined && fields[f] !== "";
     return el("div", {class: "frow" + (has ? "" : " absent")},
-      el("dt", {}, FIELD_NAMES[f], el("small", {class: "mono", text: f})),
+      el("dt", {title: "Поле источника: " + f, text: FIELD_NAMES[f]}),
       el("dd", {}, has ? highlight(String(fields[f]), marksBy[f] || []) : (f in missing ? el("span", {class: "gap-flag", style: "cursor:pointer", onclick: () => focusFinding(missing[f]), text: "не указано — см. замечание"}) : "не указано")));
   }));
   const list = fs.length ? fs.map((f, i) => el("article", {class: "finding " + f.kind, "data-f": i, onmouseenter: () => document.querySelectorAll('mark[data-f="' + i + '"]').forEach(n => n.classList.add("active")), onmouseleave: () => document.querySelectorAll("mark.active").forEach(n => n.classList.remove("active"))},
       el("div", {class: "f-top"}, el("span", {class: "kind " + f.kind, text: KINDS[f.kind] || f.kind}), el("span", {class: "f-topic", text: TOPICS[f.topic] || f.topic}),
         el("span", {class: "src" + (f.source === "llm" ? " llm" : ""), title: f.source === "llm" ? "Замечание нашла модель" : "Замечание найдено правилом", text: f.source === "llm" ? "модель" : "правило"})),
       el("div", {text: f.problem}),
-      f.quote ? el("div", {class: "quote"}, el("small", {class: "mono", text: f.field}), "«" + f.quote + "»") : el("div", {class: "quote"}, el("small", {class: "mono", text: f.field}), el("span", {class: "gap-flag", text: "поле пустое"})),
-      f.conflict_with ? [el("div", {class: "vs", text: "ПРОТИВ"}), el("div", {class: "quote"}, el("small", {class: "mono", text: f.conflict_with.field}), "«" + f.conflict_with.quote + "»")] : null,
+      f.quote ? el("div", {class: "quote"}, el("small", {title: "Поле источника: " + f.field, text: fieldName(f.field)}), "«" + f.quote + "»") : el("div", {class: "quote"}, el("small", {title: "Поле источника: " + f.field, text: fieldName(f.field)}), el("span", {class: "gap-flag", text: "поле пустое"})),
+      f.conflict_with ? [el("div", {class: "vs", text: "ПРОТИВ"}), el("div", {class: "quote"}, el("small", {title: "Поле источника: " + f.conflict_with.field, text: fieldName(f.conflict_with.field)}), "«" + f.conflict_with.quote + "»")] : null,
       el("div", {class: "rec"}, el("p", {}, el("b", {text: "Что уточнить. "}), f.recommendation), el("button", {class: "copy", onclick: e => copyText(f.recommendation, e.currentTarget), text: "копировать"}))))
     : [el("div", {class: "clean-box", text: "Условия описаны понятно: пропусков, неоднозначностей и противоречий не найдено."})];
   return el("div", {class: "d-body"},
