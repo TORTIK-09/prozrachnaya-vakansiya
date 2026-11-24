@@ -2,22 +2,34 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
 
-from pv import scoring, source
+from pv import report, scoring, source
+from pv.analyze import rules
 from pv.config import ROOT
 from pv.models import KINDS, TOPICS
+from pv.normalize import normalize
 
 SCORE_SCRIPT = ROOT / "eval" / "score.py"
 GOLD_PATH = ROOT / "eval" / "gold.json"
 EXTRA_GOLD_PATH = ROOT / "eval" / "extra_gold.json"
 SAMPLE_VACANCIES_PATH = ROOT / "examples" / "sample_vacancies.json"
 EXTRA_VACANCIES_PATH = ROOT / "eval" / "extra_vacancies.json"
+REAL_SAMPLE_PATH = ROOT / "eval" / "real_sample.json"
 SAMPLE_REPORT_PATH = ROOT / "examples" / "sample_report.json"
+
+_CONTACT_KEYS = {"contact_list", "contact_person", "phone", "phones", "email", "fax"}
+_SKIP_ID_PATHS = {
+    "id", "vac_url", "code_profession", "region.region_code",
+    "company.companycode", "company.inn", "company.ogrn", "company.kpp", "company.url",
+}
+_EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+_PHONE_RE = re.compile(r"(?<!\d)(?:\+7|8)[\s\-().]*\d{3,4}[\s\-().]*\d{2,3}[\s\-().]*\d{2}[\s\-().]*\d{2}(?!\d)")
 
 
 def _report(items: dict[str, list[tuple[str, str]]], model: dict | None = None) -> dict:
@@ -231,3 +243,44 @@ def test_gold_files_match_vacancies_and_contract(vacancies_path: Path, gold_path
             for topic, kind in pairs:
                 assert topic in TOPICS, f"{vid}: неизвестная тема {topic}"
                 assert kind in KINDS, f"{vid}: неизвестный вид {kind}"
+
+
+def _walk_values(obj, path=""):
+    if isinstance(obj, dict):
+        for k, val in obj.items():
+            np = f"{path}.{k}" if path else k
+            yield np, k, val
+            yield from _walk_values(val, np)
+    elif isinstance(obj, list):
+        for val in obj:
+            yield from _walk_values(val, path)
+
+
+def test_real_sample_format_and_no_contacts():
+    assert REAL_SAMPLE_PATH.is_file()
+    payload = json.loads(REAL_SAMPLE_PATH.read_text(encoding="utf-8"))
+    assert payload.get("status") == "200"
+    assert isinstance((payload.get("results") or {}).get("vacancies"), list)
+
+    raw = source.load_file(REAL_SAMPLE_PATH)
+    assert len(raw) == 100
+    assert len({str(v["id"]) for v in raw}) == 100
+
+    for v in raw:
+        assert normalize(v) is not None
+        for path, key, val in _walk_values(v):
+            assert key.lower() not in _CONTACT_KEYS, f"Контактное поле {path} в вакансии {v.get('id')}"
+            if isinstance(val, str) and path not in _SKIP_ID_PATHS:
+                assert not _EMAIL_RE.search(val), f"Email в поле {path} вакансии {v.get('id')}"
+                assert not _PHONE_RE.search(val), f"Телефон в поле {path} вакансии {v.get('id')}"
+
+
+def test_real_sample_runs_cleanly_through_analyzer():
+    raw = source.load_file(REAL_SAMPLE_PATH)
+    entries, stats = report.analyze_all(raw, lambda v, _llm=None: rules.check(v), None, workers=2)
+    assert len(entries) == 100
+    assert stats["vacancies"] == 100
+    assert stats["analyzer_errors"] == 0
+    assert stats["rejected_findings"] == 0
+    assert 0 < stats["with_findings"] < 100
+
