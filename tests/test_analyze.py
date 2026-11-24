@@ -341,3 +341,19 @@ def test_audit_fixes_on_live_data_patterns():
     assert ("requirements", "ambiguous") in kinds(vac(requirements="Ответственность, активность.", requirement=blank))
     # «нет» в квалификации — ноль опыта поставлен осознанно, даже у повара
     assert kinds(vac(**{"job-name": "Повар", "qualification": "нет", "requirement": {"education": "Среднее", "experience": 0}})) == []
+
+
+def test_field_against_free_text_mismatches():
+    fixed = "Понедельник–пятница, 09:00–18:00"
+    assert ("schedule", "contradiction") in kinds(vac(schedule=fixed, duty="Приём заявок, ведение журнала. График скользящий, выходные плавающие."))
+    assert ("employment", "contradiction") in kinds(vac(schedule=fixed, duty="Уборка кабинетов и коридоров. Занятость два часа в день."))
+    low = {"education": "Среднее", "experience": 1}
+    assert ("requirements", "contradiction") in kinds(vac(requirement=low, requirements="Обязательно высшее профильное образование."))
+    assert ("requirements", "contradiction") not in kinds(vac(requirement=low, requirements="Высшее или среднее профессиональное образование."))
+    assert ("location", "contradiction") in kinds(vac(duty="Учёт остатков, приём товара. Рабочее место находится на складе в г. Балтийске."))
+    assert ("location", "contradiction") not in kinds(vac(duty="Перевозка грузов, оформление накладных. Командировки в г. Советск."))
+    assert ("salary", "ambiguous") in kinds(vac(requirements="Знание учёта. Размер оплаты определяется индивидуально и может быть ниже указанного."))
+    blank = {"education": "Не указано", "experience": 0}
+    assert ("requirements", "ambiguous") in kinds(vac(requirement=blank, requirements="Стандартный набор компетенций."))
+    assert ("duties", "ambiguous") in kinds(vac(duty="Обеспечение эффективного функционирования процессов подразделения и достижение поставленных целей."))
+    assert ("duties", "ambiguous") not in kinds(vac(duty="Обеспечение работы серверов и локальной сети, резервное копирование."))

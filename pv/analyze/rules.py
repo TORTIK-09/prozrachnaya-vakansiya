@@ -96,6 +96,34 @@ FULL_DAY = re.compile(r"\bполн\w+\s+рабоч\w+\s+день", I)
 STANDARD_DAY = re.compile(r"\bполн\w+\s+рабоч\w+\s+день|ненормированн\w+\s+рабоч\w+\s+день", I)
 PART_DAY = re.compile(r"неполн\w+\s+рабоч\w+\s+(?:день|недел\w+)|частичн\w+\s+занятост\w+", I)
 
+# Смысловые расхождения: поле говорит одно, свободный текст — другое.
+FLOATING = re.compile(
+    r"(?:скользящ\w+|плавающ\w+|свободн\w+|индивидуальн\w+)\s+график\w*|график\w*\s+(?:скользящ\w+|плавающ\w+)|"
+    r"(?:плавающ\w+|скользящ\w+)\s+выходн\w+|выходные\s+(?:плавающ\w+|скользящ\w+)|"
+    r"врем\w+\s+(?:выхода|начала\s+работы|смены)\s+(?:сообща\w+|определя\w+|назнача\w+)[^.;]{0,40}", I)
+FEW_HOURS = re.compile(
+    r"(?:занятость\s+)?(?:\b[1-5]|один|два|три|четыре|пять|полтора)\s*(?:-\s*[2-6]\s*)?час\w*\s+в\s+(?:день|сутки)|"
+    r"\b(?:1[0-9]|20|[5-9])\s*час\w*\s+в\s+неделю|совмещать\s+с\s+основн\w+\s+работ\w+|"
+    r"(?:один|два|три|1|2|3)\s+(?:дня|день)\s+в\s+неделю", I)
+HIGHER_REQUIRED = re.compile(r"[^.;!?\n]{0,40}высш\w+(?:\s+\w+){0,2}\s+образовани\w+", I)
+EDU_SOFT = re.compile(r"\bили\b|\bлибо\b|желател\w+|приветству\w+|преимуществ\w+|плюс\w*|\bне\s+ниже\s+средн", I)
+PAY_CAVEAT = re.compile(
+    r"[^.;!?\n]{0,60}(?:оплат\w+|зарплат\w+|заработн\w+\s+плат\w+|оклад\w*|доход\w*)[^.;!?\n]{0,60}"
+    r"(?:определя\w+\s+индивидуальн\w+|может\s+быть\s+(?:ниже|меньше|ин\w+)|по\s+(?:результатам|итогам)\s+собеседовани\w+|"
+    r"по\s+договор[её]нност\w+|обсужда\w+)[^.;!?\n]{0,40}", I)
+EMPTY_REQ = re.compile(
+    r"требовани\w+\s+(?:стандартн\w+|обычн\w+|типов\w+|общи\w+)|(?:стандартн\w+|обычн\w+|типов\w+)\s+"
+    r"(?:требовани\w+|набор\w*\s+\w+)|согласно\s+должностн\w+\s+инструкци\w+", I)
+PLACE_SENTENCE = re.compile(r"рабоч\w+\s+мест\w+|мест\w+\s+работы|офис\w*|склад\w*|цех\w*|находит\w+|расположен\w*", I)
+TRIP = re.compile(r"командировк\w+|выезд\w*|разъезд\w*|доставк\w+|филиал\w*", I)
+TOWN = re.compile(r"\bг\.?\s*([А-ЯЁ][а-яё]+(?:-[А-ЯЁ]?[а-яё]+)?)|\bгород[еау]?\s+([А-ЯЁ][а-яё]+)")
+ABSTRACT = re.compile(
+    r"обеспечени\w*|функционировани\w*|эффективн\w*|процесс\w*|достижени\w*|поставленн\w*|цел(?:ей|и|ь|ями)\b|"
+    r"реализаци\w*|взаимодействи\w*|деятельност\w*|подразделени\w*|участи\w*|задач\w*|организаци\w*\s+работ\w*|"
+    r"выполнени\w*|функци\w*|смежн\w*|отдел\w*|компани\w*|развити\w*|стратеги\w*|результат\w*", I)
+_CONTENT_WORD = re.compile(r"[а-яёa-z]{4,}", I)
+_EDU_LEVEL = (("высш", 3), ("средн\w+\s+профессиональн", 2), ("средн", 1), ("общее", 1), ("основное", 1))
+
 _LOOKALIKE = str.maketrans("aAcCeEoOpPxXyHKMTB", "аАсСеЕоОрРхХуНКМТВ")
 _SENTENCE_END = ".;!?\n"
 
@@ -157,6 +185,12 @@ def _duties(v: Vacancy) -> list[Finding]:
                         "Уточните у работодателя, какие задачи сотрудник выполняет регулярно.")]
     hits = list(VAGUE_DUTY.finditer(norm(v.duty)))
     if not hits:
+        words = _CONTENT_WORD.findall(norm(v.duty))
+        abstract = sum(1 for w in words if ABSTRACT.fullmatch(w))
+        if 4 <= len(words) <= 22 and abstract / len(words) >= 0.6:
+            return [Finding("duties", "ambiguous", "duty", v.duty.strip(" ."),
+                            "Обязанности описаны общими словами о процессах и целях: ни одной конкретной задачи в описании нет.",
+                            "Уточните у работодателя, какие конкретные задачи сотрудник выполняет регулярно.")]
         return []           # короткие, но конкретные обязанности («Уборка помещений») — не замечание
     rest = v.duty
     for m in reversed(hits):
@@ -259,6 +293,25 @@ def _requirements(v: Vacancy) -> list[Finding]:
                 "Уточните у работодателя, нужен ли опыт работы, и приведите поле и текст к одному значению.",
                 conflict_with=Evidence(hit[0], hit[1])))
 
+    level = next((r for pat, r in _EDU_LEVEL if re.search(pat, norm(v.education or ""), I)), 0)
+    if level in (1, 2):
+        for f in REQ_FIELDS:
+            t = v.text_of(f)
+            hit = search(HIGHER_REQUIRED, t)
+            if hit and not EDU_SOFT.search(norm(_sentence(t, hit))):
+                out.append(Finding(
+                    "requirements", "contradiction", "requirement.education", v.education,
+                    "В поле образования указан уровень ниже высшего, а в тексте требуется высшее образование.",
+                    "Уточните у работодателя, какое образование обязательно, и приведите поле и текст к одному значению.",
+                    conflict_with=Evidence(f, hit.strip(" ,;:"))))
+                break
+    empty = _first(v, REQ_FIELDS, EMPTY_REQ)
+    if empty and sum(len(t) for t in texts) <= 160 and _nothing(v.education) and not exp:
+        out.append(Finding("requirements", "ambiguous", empty[0], empty[1],
+                           "Вместо требований стоит отсылка к «стандартным»: ни одного конкретного требования не названо.",
+                           "Уточните у работодателя, какие образование, опыт и навыки нужны для этой должности."))
+        return out
+
     if not any(texts):
         if _nothing(v.education):
             out.append(Finding("requirements", "missing", "requirements", "",
@@ -299,6 +352,11 @@ def _salary(v: Vacancy) -> list[Finding]:
                         "Минимальная зарплата больше максимальной.",
                         "Уточните у работодателя верные границы оплаты.",
                         conflict_with=Evidence("salary_max", str(hi)))]
+    caveat = _first(v, TEXT_FIELDS, PAY_CAVEAT)
+    if caveat:
+        return [Finding("salary", "ambiguous", caveat[0], caveat[1].strip(" ,;:"),
+                        "Сумма оплаты указана, но в тексте оговорено, что она определяется отдельно: непонятно, на что рассчитывать.",
+                        "Уточните у работодателя, от чего зависит размер оплаты и какую сумму сотрудник получает на самом деле.")]
     if lo is not None and hi is None:
         return [Finding("salary", "ambiguous", "salary_min", str(lo),
                         "Указана только нижняя граница оплаты: непонятно, это фиксированная сумма или начало диапазона.",
@@ -338,6 +396,12 @@ def _schedule(v: Vacancy) -> list[Finding]:
                             "Указан сменный график без схемы чередования смен и времени их начала и окончания.",
                             "Уточните у работодателя схему смен (сколько рабочих и выходных дней подряд) и время начала и окончания смены.")]
         return []
+    floating = _first(v, TEXT_FIELDS, FLOATING)
+    if floating and (search(TIME_RANGE, v.schedule) or search(DAYS, v.schedule)) and not shift:
+        return [Finding("schedule", "contradiction", "schedule", v.schedule,
+                        "В поле графика указано фиксированное расписание, а в тексте — скользящий или плавающий график.",
+                        "Уточните у работодателя, фиксированы ли рабочие дни и часы, и если нет — как и кем составляется расписание.",
+                        conflict_with=Evidence(floating[0], floating[1]))]
     if search(STANDARD_DAY, v.schedule) and not search(PART_TIME_TEXT, v.schedule):
         # «Полный рабочий день» — общепринятое обозначение пятидневки с восьмичасовым днём: это не неоднозначность
         return []
@@ -351,6 +415,22 @@ def _schedule(v: Vacancy) -> list[Finding]:
                         "По указанному режиму нельзя понять, в какие дни и сколько часов предстоит работать.",
                         "Уточните у работодателя рабочие дни недели и время начала и окончания работы.")]
     return []
+
+
+def _other_town(v: Vacancy) -> tuple[str, str] | None:
+    """Предложение из текста, где рабочее место названо в другом городе, чем в адресе."""
+    towns = {(a or b)[:5].lower() for addr in v.addresses for a, b in TOWN.findall(addr)}
+    if not towns:
+        return None
+    for f in TEXT_FIELDS:
+        t = v.text_of(f)
+        for m in TOWN.finditer(t):
+            name = m.group(1) or m.group(2)
+            sentence = _sentence(t, m.group(0))
+            if name[:5].lower() in towns or not PLACE_SENTENCE.search(norm(sentence)) or TRIP.search(norm(sentence)):
+                continue
+            return f, sentence.strip(" .;")
+    return None
 
 
 def _location(v: Vacancy) -> list[Finding]:
@@ -373,6 +453,12 @@ def _location(v: Vacancy) -> list[Finding]:
         return [Finding("location", "missing", "addresses.address[].location", "", "Адрес места работы не указан.",
                         "Уточните у работодателя адрес рабочего места: населённый пункт, улицу и номер дома.")]
     addr = v.addresses[0]
+    other = _other_town(v)
+    if other:
+        return [Finding("location", "contradiction", "addresses.address[].location", addr,
+                        "В адресе указан один населённый пункт, а в тексте рабочее место находится в другом.",
+                        "Уточните у работодателя, где на самом деле находится рабочее место.",
+                        conflict_with=Evidence(other[0], other[1]))]
     if STREET.search(addr) or VILLAGE.search(addr):
         return []           # в сёлах и посёлках улицы и номера дома может не быть вовсе
     if CITY.search(addr):
@@ -393,7 +479,8 @@ def _employment(v: Vacancy) -> list[Finding]:
                         "Уточните у работодателя тип занятости: полная, частичная, временная или иная.")]
     emp = v.employment.lower()
     if "полн" in emp and "неполн" not in emp:
-        hit = _first(v, ("schedule", "scheduleTypeComment", *TEXT_FIELDS), PART_TIME_TEXT)
+        hit = (_first(v, ("schedule", "scheduleTypeComment", *TEXT_FIELDS), PART_TIME_TEXT)
+               or _first(v, ("scheduleTypeComment", *TEXT_FIELDS), FEW_HOURS))
         if hit:
             return [Finding("employment", "contradiction", "employment", v.employment,
                             "В поле указана полная занятость, а в тексте — частичная занятость или неполный день.",

@@ -26,10 +26,9 @@ class Fake:
             raise RuntimeError("нет связи")
         fields = json.loads(user[user.index("{"):user.rindex("}") + 1])
         out = []
-        if "Балтийске" in fields.get("duty", ""):
-            out.append({"topic": "location", "kind": "contradiction", "field": "addresses.address[].location",
-                        "quote": fields["addresses.address[].location"], "problem": "п", "recommendation": "р",
-                        "conflict_field": "duty", "conflict_quote": "на складе в г. Балтийске"})
+        if fields.get("job-name") == "Водитель автомобиля":       # то, чего правила не видят: должность и обязанности о разном
+            out.append({"topic": "title", "kind": "contradiction", "field": "job-name", "quote": "Водитель автомобиля",
+                        "problem": "п", "recommendation": "р", "conflict_field": "duty", "conflict_quote": "Ведение бухгалтерского учёта"})
         if fields.get("job-name") in ("Библиотекарь", "Повар горячего цеха"):
             out.append({"topic": "requirements", "kind": "ambiguous", "field": "requirements",
                         "quote": fields["requirements"].rstrip("."), "problem": "п", "recommendation": "р"})
@@ -49,22 +48,23 @@ def modes(result, key):
 
 def test_rules_only_stats_need_no_model():
     r = calibrate.rules_only()
-    assert r["model"] is None and [s["key"] for s in r["sets"]] == ["sample", "extra"]
-    sample, extra = r["sets"][0]["modes"]["rules"], r["sets"][1]["modes"]["rules"]
+    assert r["model"] is None and [s["key"] for s in r["sets"]] == ["sample", "extra", "holdout"]
+    sample, extra, hold = (x["modes"]["rules"] for x in r["sets"])
     assert sample["recall"] == 1.0 and sample["extra_total"] == 0
-    assert extra["must_found"] == 0 and extra["extra_total"] == 0      # смысловые случаи правилам недоступны
+    assert (extra["must_found"], extra["must_total"], extra["extra_total"]) == (7, 8, 0)   # кроме «должность против обязанностей»
+    assert hold["recall"] == 1.0 and hold["extra_total"] == 0 and hold["extra_on_clean"] == 0
 
 
 def test_calibration_measures_three_ways_and_blocks_unreliable_kind():
     llm = Fake()
     seen = []
     r = calibrate.run(llm, lambda done, total, sec: seen.append((done, total)))
-    assert llm.calls == r["vacancies"] == 22 and seen[-1] == (22, 22) and r["errors"] == 0
+    assert llm.calls == r["vacancies"] == 32 and seen[-1] == (32, 32) and r["errors"] == 0
     assert r["blocked"] == [["requirements", "ambiguous"]]             # две придирки, ни одного попадания
     cats = {(c["topic"], c["kind"]): c for c in r["categories"]}
-    assert cats[("location", "contradiction")] == {"topic": "location", "kind": "contradiction", "ok": 1, "extra": 0, "blocked": False}
+    assert cats[("title", "contradiction")] == {"topic": "title", "kind": "contradiction", "ok": 1, "extra": 0, "blocked": False}
     extra, sample = modes(r, "extra"), modes(r, "sample")
-    assert extra["rules"]["must_found"] == 0 and extra["llm"]["must_found"] == 1 and extra["both"]["must_found"] == 1
+    assert extra["rules"]["must_found"] == 7 and extra["llm"]["must_found"] == 1 and extra["both"]["must_found"] == 8
     assert extra["both_raw"]["extra_total"] == 1 and extra["both"]["extra_total"] == 0
     assert sample["both_raw"]["extra_on_clean"] == 1 and sample["both"]["extra_on_clean"] == 0
     assert sample["both"]["recall"] == 1.0 and sample["llm"]["recall"] < 1.0
@@ -88,21 +88,21 @@ def test_saved_profile_is_applied_in_analysis(tmp_path):
 
 def test_modes_of_analyze(monkeypatch):
     llm = Fake()
-    v = normalize({"id": "K", "job-name": "Кладовщик", "duty": "Учёт остатков. Рабочее место находится на складе в г. Балтийске.",
+    v = normalize({"id": "K", "job-name": "Водитель автомобиля", "duty": "Ведение бухгалтерского учёта, сверка расчётов.",
                    "requirements": "Знание складского учёта", "salary_min": 1, "salary_max": 2, "schedule": "Гибкий график",
                    "employment": "Полная занятость", "requirement": {"experience": 1},
                    "addresses": {"address": [{"location": "г. Калининград, ул. Учебная, д. 7"}]}})
     assert {(f.topic, f.source) for f in analyze(v, llm, "rules")} == {("schedule", "rule")}
-    assert {(f.topic, f.source) for f in analyze(v, llm, "llm")} == {("location", "llm")}
+    assert {(f.topic, f.source) for f in analyze(v, llm, "llm")} == {("title", "llm")}
     assert {(f.topic, f.source) for f in analyze(v, llm, "both")} == {("schedule", "rule")}       # не настроена
     monkeypatch.setattr(profile, "cached", lambda info, reports_dir=None: {"blocked": []})
-    assert {(f.topic, f.source) for f in analyze(v, llm, "both")} == {("schedule", "rule"), ("location", "llm")}
+    assert {(f.topic, f.source) for f in analyze(v, llm, "both")} == {("schedule", "rule"), ("title", "llm")}
     assert analyze(v, None, "llm") == []
 
 
 def test_calibration_with_dead_model_counts_errors():
     r = calibrate.run(Fake(fail=True))
-    assert r["errors"] == 22 and r["blocked"] == [] and modes(r, "sample")["both"]["recall"] == 1.0
+    assert r["errors"] == 32 and r["blocked"] == [] and modes(r, "sample")["both"]["recall"] == 1.0
 
 
 def client_with(llm, tmp_path, monkeypatch, auto=True):
@@ -135,7 +135,7 @@ def test_unknown_model_is_calibrated_automatically_then_recognised(tmp_path, mon
     first = c.get("/api/calibration").json()
     assert first["state"] == "running" and first["model"]["model"] == "fake-1"
     done = wait_done(c)
-    assert done["state"] == "done" and done["vacancies"] == 22 and done["blocked"] == 1
+    assert done["state"] == "done" and done["vacancies"] == 32 and done["blocked"] == 1
     stats = c.get("/api/stats").json()["stats"]
     assert stats["model"]["model"] == "fake-1" and "both" in stats["sets"][0]["modes"]
     # после перезапуска панели та же модель узнаётся и заново не настраивается
@@ -180,5 +180,5 @@ def test_agreement_takes_model_wording_and_rule_quotes():
 def test_calibration_counts_who_sees_what():
     r = calibrate.run(Fake())
     a = {s["key"]: s["agreement"] for s in r["sets"]}
-    assert a["extra"]["llm_only"] == [2, 1] and a["extra"]["both"] == [0, 0]
+    assert a["extra"]["llm_only"] == [2, 1] and a["extra"]["both"] == [0, 0] and a["extra"]["rules_only"] == [7, 7]
     assert a["sample"]["rules_only"][0] == a["sample"]["rules_only"][1] > 10

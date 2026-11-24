@@ -26,7 +26,8 @@ from .normalize import normalize
 
 SETS = (
     ("sample", "Учебный набор организаторов", ROOT / "examples" / "sample_vacancies.json", ROOT / "eval" / "gold.json"),
-    ("extra", "Собственные примеры", ROOT / "eval" / "extra_vacancies.json", ROOT / "eval" / "extra_gold.json"),
+    ("extra", "Смысловые расхождения", ROOT / "eval" / "extra_vacancies.json", ROOT / "eval" / "extra_gold.json"),
+    ("holdout", "Контрольный набор", ROOT / "eval" / "holdout_vacancies.json", ROOT / "eval" / "holdout_gold.json"),
 )
 MIN_PRECISION = 0.5     # вид замечаний модели отключается, если верных среди них меньше половины
 
