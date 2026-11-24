@@ -261,3 +261,5 @@ mark.active { outline: 2px solid var(--accent); }
 .history time { color: var(--ink-3); font-variant-numeric: tabular-nums; }
 .history .arrow { color: var(--ink-3); }
 .finding.dismissed .history { opacity: 1; }
+
+.history li { align-items: center; }
