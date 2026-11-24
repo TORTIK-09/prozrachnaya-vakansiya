@@ -1,0 +1,5 @@
+# Расписание для cron (Linux, macOS): рабочий режим каждый день в 06:00.
+# Установка: замените /opt/prozrachnaya-vakansiya на путь к проекту и добавьте строку через `crontab -e`.
+# Тот же процесс запускается вручную командой: uv run python -m pv run
+
+0 6 * * * cd /opt/prozrachnaya-vakansiya && uv run python -m pv run >> reports/cron.log 2>&1

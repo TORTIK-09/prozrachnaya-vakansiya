@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
-from .models import Evidence, Finding, LLM, Vacancy, validate
+from .models import SOURCE_FIELDS, Evidence, Finding, LLM, Vacancy, validate
 from .normalize import normalize
 
 Analyze = Callable[[Vacancy, LLM | None], list[Finding]]
@@ -116,8 +116,10 @@ def analyze_all(raw_items: list[Any], analyze: Analyze, llm: LLM | None, workers
 
     entries = []
     for v, (found, error, cached, rejected) in zip(vacancies, results):
-        entry: dict[str, Any] = {"id": v.id, "url": v.url, "title": v.title,
-                                 "findings": [f.to_json() for f in found]}
+        entry: dict[str, Any] = {"id": v.id, "url": v.url, "title": v.title, "company": v.company,
+                                 "findings": [f.to_json() for f in found],
+                                 # значения полей источника: по ним редактор видит цитаты в контексте
+                                 "fields": {f: v.text_of(f) for f in SOURCE_FIELDS if v.text_of(f)}}
         if error:
             entry["error"] = error
             stats["analyzer_errors"] += 1

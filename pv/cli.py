@@ -131,6 +131,47 @@ def cmd_schedule(cfg: config_mod.Config, use_llm: bool = True) -> int:
         return 0
 
 
+def cmd_web(cfg: config_mod.Config, port: int | None = None) -> int:
+    """Веб-панель: просмотр отчёта, запуск проверок, сценарий с резюме."""
+    import socket
+
+    import uvicorn
+
+    from . import web
+    port = port or cfg.web_port
+    with socket.socket() as s:
+        if s.connect_ex((cfg.web_host, port)) == 0:
+            log(f"ОШИБКА: порт {port} уже занят. Запустите с другим: python -m pv web --port {port + 1}")
+            return 2
+    log(f"панель: http://{cfg.web_host}:{port}  (остановить — Ctrl+C)")
+    uvicorn.run(web.create_app(cfg), host=cfg.web_host, port=port, log_level="warning")
+    return 0
+
+
+def cmd_resume(cfg: config_mod.Config, resume_id: str, vacancy_id: str, report_path: str, out: str | None) -> int:
+    """Свой сценарий: черновик резюме под вакансию из готового отчёта."""
+    import json
+
+    from .extra import resume as resume_mod
+    try:
+        rep = json.loads(Path(report_path).read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        log(f"ОШИБКА: не удалось прочитать отчёт {report_path}: {e}")
+        return 2
+    entry = next((v for v in rep.get("vacancies", []) if str(v.get("id")) == vacancy_id), None)
+    res = next((r for r in resume_mod.load_resumes() if r["id"] == resume_id), None)
+    if entry is None or res is None:
+        log("ОШИБКА: вакансия или резюме не найдены")
+        return 2
+    result = resume_mod.draft(res, entry)
+    if out:
+        report.write_json(Path(out), result)
+        log(f"черновик: {out}")
+    else:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
@@ -146,6 +187,13 @@ def main(argv: list[str] | None = None) -> int:
     p_check.add_argument("--out", default="reports/check.json", help="куда записать отчёт")
     p_check.add_argument("--cache", action="store_true", help="не анализировать заново неизменившиеся вакансии")
     p_sched = sub.add_parser("schedule", help="работать постоянно и запускать рабочий режим по расписанию")
+    p_web = sub.add_parser("web", help="веб-панель для просмотра отчёта")
+    p_web.add_argument("--port", type=int, help="порт (иначе из настроек, по умолчанию 8085)")
+    p_res = sub.add_parser("resume", help="свой сценарий: черновик резюме под вакансию из отчёта")
+    p_res.add_argument("--resume", default="RES-01", help="ID резюме из examples/sample_resumes.json")
+    p_res.add_argument("--vacancy", required=True, help="ID вакансии из отчёта")
+    p_res.add_argument("--report", default="reports/check.json", help="отчёт, из которого берётся вакансия")
+    p_res.add_argument("--out", help="куда записать черновик (иначе — на экран)")
     for p in (p_run, p_check, p_sched):
         p.add_argument("--no-llm", action="store_true", help="не обращаться к модели, только правила")
     a = ap.parse_args(argv)
@@ -165,4 +213,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_run(cfg, not a.no_llm)
     if a.cmd == "check":
         return cmd_check(cfg, a.file, a.out, not a.no_llm, a.cache)
+    if a.cmd == "web":
+        return cmd_web(cfg, a.port)
+    if a.cmd == "resume":
+        return cmd_resume(cfg, a.resume, a.vacancy, a.report, a.out)
     return cmd_schedule(cfg, not a.no_llm)

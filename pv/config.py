@@ -22,6 +22,8 @@ class Config:
     llm_base_url: str = ""
     llm_model: str = ""
     llm_api_key: str = ""
+    web_host: str = "127.0.0.1"
+    web_port: int = 8085
 
     @property
     def reports(self) -> Path:

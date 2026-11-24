@@ -1,0 +1,460 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Прозрачная вакансия</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23173a3a'/%3E%3Ccircle cx='14' cy='14' r='6.5' fill='none' stroke='%23f2b441' stroke-width='2.6'/%3E%3Cpath d='m19 19 6 6' stroke='%23f4efe4' stroke-width='2.8' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #f4f1ea; --surface: #fffdf8; --sunken: #ebe6da; --line: #dcd5c5; --line-soft: #e8e2d4;
+  --ink: #1d2422; --ink-2: #505a56; --ink-3: #848c86;
+  --brand: #17403f; --brand-ink: #f4efe4; --accent: #0f6b68;
+  --amb: #b06a00; --amb-bg: #fbecc9; --amb-line: #e9c877;
+  --con: #a8321f; --con-bg: #f8dcd4; --con-line: #e3a595;
+  --mis: #43568a; --mis-bg: #dfe5f5; --mis-line: #aab7dc;
+  --ok: #2b7a4b; --ok-bg: #dcefe1;
+  --shadow: 0 1px 2px rgba(40,34,20,.06), 0 6px 18px rgba(40,34,20,.05);
+  --r: 10px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #131817; --surface: #1b2221; --sunken: #161c1b; --line: #2e3836; --line-soft: #253030;
+    --ink: #e9ece7; --ink-2: #aab3ae; --ink-3: #77817c;
+    --brand: #0e2726; --brand-ink: #e9ece7; --accent: #58c2b8;
+    --amb: #f0b445; --amb-bg: #3a2c0b; --amb-line: #6a5013;
+    --con: #f08a75; --con-bg: #3d1a13; --con-line: #6e2c20;
+    --mis: #9fb2ea; --mis-bg: #1d2742; --mis-line: #35447a;
+    --ok: #6bcf90; --ok-bg: #143021;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 22px rgba(0,0,0,.25);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #131817; --surface: #1b2221; --sunken: #161c1b; --line: #2e3836; --line-soft: #253030;
+  --ink: #e9ece7; --ink-2: #aab3ae; --ink-3: #77817c;
+  --brand: #0e2726; --brand-ink: #e9ece7; --accent: #58c2b8;
+  --amb: #f0b445; --amb-bg: #3a2c0b; --amb-line: #6a5013;
+  --con: #f08a75; --con-bg: #3d1a13; --con-line: #6e2c20;
+  --mis: #9fb2ea; --mis-bg: #1d2742; --mis-line: #35447a;
+  --ok: #6bcf90; --ok-bg: #143021;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 22px rgba(0,0,0,.25);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+.mono { font-family: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", monospace; font-size: .86em; }
+.num { font-variant-numeric: tabular-nums; }
+
+/* шапка */
+.top { background: var(--brand); color: var(--brand-ink); padding: 14px 24px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.logo { display: flex; align-items: center; gap: 12px; margin-right: auto; }
+.logo svg { width: 34px; height: 34px; flex: none; }
+.logo h1 { margin: 0; font-size: 19px; font-weight: 650; letter-spacing: -.01em; }
+.logo p { margin: 0; font-size: 12.5px; opacity: .72; }
+.chip { display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px; border-radius: 999px; font-size: 12.5px; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.16); white-space: nowrap; }
+.chip i { width: 7px; height: 7px; border-radius: 50%; background: #f2b441; }
+.chip.on i { background: #6bdc9a; }
+.icon-btn { background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.16); color: inherit; border-radius: 8px; width: 34px; height: 32px; display: grid; place-items: center; }
+.icon-btn:hover { background: rgba(255,255,255,.18); }
+
+/* панель действий */
+.bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 14px 24px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.seg { display: inline-flex; background: var(--sunken); border: 1px solid var(--line); border-radius: 9px; padding: 3px; }
+.seg button { border: 0; background: none; padding: 6px 14px; border-radius: 6px; color: var(--ink-2); font-weight: 550; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+.btn { border: 1px solid var(--line); background: var(--surface); padding: 7px 14px; border-radius: 8px; font-weight: 550; display: inline-flex; gap: 8px; align-items: center; }
+.btn:hover { border-color: var(--ink-3); }
+a.btn { text-decoration: none; color: var(--ink); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+:root[data-theme="dark"] .btn.primary { color: #06201e; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .btn.primary { color: #06201e; } }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn:disabled { opacity: .55; cursor: progress; }
+.field { display: inline-flex; align-items: center; gap: 8px; color: var(--ink-2); font-size: 13.5px; }
+.field input { width: 84px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.grow { flex: 1; }
+.note { font-size: 13px; color: var(--ink-2); }
+.banner { margin: 14px 24px 0; padding: 11px 14px; border-radius: var(--r); border: 1px solid var(--con-line); background: var(--con-bg); color: var(--con); font-size: 14px; display: none; }
+.banner.show { display: block; }
+.banner.info { border-color: var(--line); background: var(--sunken); color: var(--ink-2); }
+
+/* сводка */
+.summary { display: grid; grid-template-columns: repeat(4, minmax(120px, 1fr)) 2.2fr; gap: 12px; padding: 16px 24px 4px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 16px; box-shadow: var(--shadow); display: grid; align-content: center; }
+.stat b { display: block; font-size: 34px; font-weight: 650; line-height: 1.15; letter-spacing: -.02em; }
+.stat span { font-size: 13px; color: var(--ink-2); }
+.stat.ok b { color: var(--ok); } .stat.warn b { color: var(--amb); }
+.topics { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 10px 14px; box-shadow: var(--shadow); display: grid; gap: 3px; align-content: center; }
+.topic-row { display: grid; grid-template-columns: 138px 1fr 30px; gap: 10px; align-items: center; font-size: 12.5px; border: 0; background: none; padding: 2px 4px; border-radius: 6px; text-align: left; color: var(--ink-2); }
+.topic-row:hover, .topic-row[aria-pressed="true"] { background: var(--sunken); color: var(--ink); }
+.topic-row .track { height: 7px; border-radius: 4px; background: var(--sunken); overflow: hidden; display: flex; }
+.topic-row[aria-pressed="true"] .track { background: var(--line); }
+.track u { display: block; height: 100%; }
+.track .k-contradiction { background: var(--con); } .track .k-ambiguous { background: var(--amb); } .track .k-missing { background: var(--mis); }
+
+/* рабочая область */
+.work { display: grid; grid-template-columns: minmax(300px, 380px) 1fr; gap: 16px; padding: 14px 24px 28px; align-items: start; }
+.pane { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); min-width: 0; }
+.list-head { padding: 10px; border-bottom: 1px solid var(--line-soft); display: grid; gap: 8px; }
+.list-head input { width: 100%; padding: 8px 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.filters { display: flex; gap: 6px; flex-wrap: wrap; }
+.pill { border: 1px solid var(--line); background: none; border-radius: 999px; padding: 3px 10px; font-size: 12.5px; color: var(--ink-2); display: inline-flex; gap: 6px; align-items: center; }
+.pill[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+.dot.contradiction { background: var(--con); } .dot.ambiguous { background: var(--amb); } .dot.missing { background: var(--mis); } .dot.clean { background: var(--ok); }
+.list { max-height: calc(100vh - 150px); overflow: auto; }
+.item { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; width: 100%; text-align: left; border: 0; border-bottom: 1px solid var(--line-soft); background: none; padding: 10px 12px; border-left: 3px solid transparent; }
+.item:hover { background: var(--sunken); }
+.item[aria-current="true"] { background: var(--sunken); border-left-color: var(--accent); }
+.item .t { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item .c { grid-column: 1; font-size: 12.5px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item .marks { grid-row: 1 / span 2; grid-column: 2; display: flex; gap: 4px; align-items: center; }
+.count { font-size: 12px; font-weight: 650; padding: 1px 7px; border-radius: 999px; }
+.count.contradiction { background: var(--con-bg); color: var(--con); } .count.ambiguous { background: var(--amb-bg); color: var(--amb); } .count.missing { background: var(--mis-bg); color: var(--mis); }
+.count.clean { background: var(--ok-bg); color: var(--ok); }
+.empty { padding: 34px 20px; text-align: center; color: var(--ink-3); }
+
+/* карточка вакансии */
+.detail { padding: 0; }
+.d-head { padding: 18px 22px 14px; border-bottom: 1px solid var(--line-soft); display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+.d-head h2 { margin: 0 0 2px; font-size: 21px; letter-spacing: -.015em; line-height: 1.25; }
+.d-head .sub { color: var(--ink-2); font-size: 13.5px; }
+.d-head a { color: var(--accent); }
+.d-actions { margin-left: auto; display: flex; gap: 8px; }
+.tabs { display: flex; gap: 2px; padding: 0 16px; border-bottom: 1px solid var(--line-soft); }
+.tabs button { border: 0; background: none; padding: 11px 12px 9px; color: var(--ink-2); font-weight: 600; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.d-body { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 0; }
+.col { padding: 16px 22px 22px; min-width: 0; }
+.col + .col { border-left: 1px solid var(--line-soft); }
+.col h3 { margin: 0 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-3); font-weight: 700; }
+.clean-box { background: var(--ok-bg); color: var(--ok); border-radius: var(--r); padding: 14px 16px; font-weight: 550; }
+.finding { border: 1px solid var(--line); border-left-width: 4px; border-radius: var(--r); padding: 12px 14px; margin-bottom: 10px; background: var(--surface); }
+.finding.contradiction { border-left-color: var(--con); } .finding.ambiguous { border-left-color: var(--amb); } .finding.missing { border-left-color: var(--mis); }
+.finding.active { box-shadow: 0 0 0 2px var(--accent); }
+.f-top { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
+.kind { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 2px 8px; border-radius: 5px; }
+.kind.contradiction { background: var(--con-bg); color: var(--con); } .kind.ambiguous { background: var(--amb-bg); color: var(--amb); } .kind.missing { background: var(--mis-bg); color: var(--mis); }
+.f-topic { font-weight: 650; }
+.src { margin-left: auto; font-size: 11.5px; color: var(--ink-3); border: 1px solid var(--line); border-radius: 5px; padding: 1px 7px; }
+.src.llm { color: var(--accent); border-color: var(--accent); }
+.quote { margin: 8px 0; padding: 7px 11px; background: var(--sunken); border-radius: 7px; font-size: 13.5px; }
+.quote small { display: block; color: var(--ink-3); font-size: 11.5px; margin-bottom: 1px; }
+.vs { text-align: center; color: var(--con); font-size: 11.5px; font-weight: 700; letter-spacing: .08em; margin: -3px 0; }
+.rec { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); display: flex; gap: 10px; align-items: flex-start; }
+.rec p { margin: 0; flex: 1; }
+.rec b { color: var(--accent); font-weight: 650; }
+.copy { border: 1px solid var(--line); background: none; border-radius: 6px; padding: 2px 8px; font-size: 12px; color: var(--ink-2); flex: none; }
+.copy:hover { border-color: var(--ink-3); color: var(--ink); }
+.frow { display: grid; grid-template-columns: 178px 1fr; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line-soft); font-size: 14px; }
+.frow:last-child { border-bottom: 0; }
+.frow dt { color: var(--ink-2); font-size: 13px; }
+.frow dt small { display: block; color: var(--ink-3); font-size: 11px; overflow-wrap: anywhere; }
+.frow dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.frow.absent dd { color: var(--ink-3); font-style: italic; }
+mark { padding: 1px 2px; border-radius: 3px; color: inherit; cursor: pointer; }
+mark.contradiction { background: var(--con-bg); box-shadow: inset 0 -2px 0 var(--con); } mark.ambiguous { background: var(--amb-bg); box-shadow: inset 0 -2px 0 var(--amb); }
+mark.active { outline: 2px solid var(--accent); }
+.gap-flag { display: inline-block; font-size: 11.5px; font-weight: 650; padding: 1px 8px; border-radius: 5px; background: var(--mis-bg); color: var(--mis); font-style: normal; }
+
+/* резюме */
+.resume { padding: 16px 22px 24px; display: grid; gap: 14px; }
+.resume .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.resume select { padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); min-width: 260px; }
+.card { border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; }
+.card h4 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-3); }
+.tags { display: flex; gap: 6px; flex-wrap: wrap; }
+.tag { padding: 3px 10px; border-radius: 999px; font-size: 13px; background: var(--sunken); border: 1px solid var(--line); }
+.tag.hit { background: var(--ok-bg); border-color: transparent; color: var(--ok); font-weight: 600; }
+.resume ul { margin: 4px 0 0; padding-left: 20px; } .resume li { margin: 3px 0; }
+.resume li.hit { font-weight: 600; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.spin { width: 15px; height: 15px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: sp .7s linear infinite; display: none; }
+.busy .spin { display: inline-block; }
+@keyframes sp { to { transform: rotate(1turn); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+@media (max-width: 1100px) { .summary { grid-template-columns: repeat(2, 1fr); } .topics { grid-column: 1 / -1; } .d-body, .two { grid-template-columns: 1fr; } .col + .col { border-left: 0; border-top: 1px solid var(--line-soft); } }
+@media (max-width: 780px) { .work { grid-template-columns: 1fr; } .list { max-height: 320px; } .top, .bar, .summary, .work { padding-left: 16px; padding-right: 16px; } .banner { margin-left: 16px; margin-right: 16px; } .frow { grid-template-columns: 1fr; gap: 2px; } }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="logo">
+    <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="14" cy="14" r="7.5" fill="none" stroke="#f2b441" stroke-width="2.6"/><path d="m19.5 19.5 7 7" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/><path d="M10.5 14h7M10.5 11h4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" opacity=".8"/></svg>
+    <div><h1>Прозрачная вакансия</h1><p>Насколько понятно описаны условия работы · Калининградская область</p></div>
+  </div>
+  <span class="chip" id="modelChip"><i></i><span>модель: проверяю…</span></span>
+  <button class="icon-btn" id="themeBtn" title="Светлая или тёмная тема" aria-label="Сменить тему">◐</button>
+</header>
+
+<div class="bar">
+  <div class="seg" role="group" aria-label="Какой отчёт показать">
+    <button id="segCheck" aria-pressed="true">Проверочный набор</button>
+    <button id="segLatest" aria-pressed="false">Вакансии с портала</button>
+  </div>
+  <span class="grow"></span>
+  <span id="actionsCheck" style="display:contents">
+    <button class="btn" id="btnSample"><span class="spin"></span>Проверить учебный набор</button>
+    <button class="btn primary" id="btnUpload"><span class="spin"></span>Проверить свой JSON…</button>
+    <input type="file" id="file" accept=".json,application/json" hidden>
+  </span>
+  <span id="actionsLatest" style="display:none">
+    <label class="field">не больше <input type="number" id="maxV" min="1" max="5000" value="200"> вакансий</label>
+    <button class="btn primary" id="btnRun"><span class="spin"></span>Загрузить с портала</button>
+  </span>
+  <a class="btn" id="jsonLink" href="/api/report?kind=check" target="_blank" rel="noopener">JSON отчёта</a>
+</div>
+<div class="banner" id="banner" role="status"></div>
+
+<section class="summary" aria-label="Сводка по отчёту">
+  <div class="stat"><b class="num" id="sTotal">—</b><span>вакансий в отчёте</span></div>
+  <div class="stat ok"><b class="num" id="sClean">—</b><span>понятных, без замечаний</span></div>
+  <div class="stat warn"><b class="num" id="sBad">—</b><span>нужно уточнить</span></div>
+  <div class="stat"><b class="num" id="sFind">—</b><span>замечаний всего</span></div>
+  <div class="topics" id="topics" aria-label="Замечания по темам"></div>
+</section>
+
+<main class="work">
+  <aside class="pane">
+    <div class="list-head">
+      <input type="search" id="q" placeholder="Поиск по должности, организации, ID" aria-label="Поиск по вакансиям">
+      <div class="filters" id="kindFilters"></div>
+    </div>
+    <div class="list" id="list"></div>
+  </aside>
+  <section class="pane detail" id="detail"><div class="empty">Выберите вакансию слева</div></section>
+</main>
+
+<script>
+"use strict";
+const TOPICS = {title: "Название должности", duties: "Обязанности", requirements: "Требования", salary: "Оплата", schedule: "График", location: "Место работы", employment: "Тип занятости"};
+const KINDS = {contradiction: "противоречие", ambiguous: "неоднозначность", missing: "пропуск"};
+const FIELD_NAMES = {"job-name": "Название должности", "duty": "Обязанности", "requirements": "Требования", "qualification": "Квалификация", "requirement.education": "Образование", "requirement.experience": "Опыт, лет", "requirement.qualification": "Квалификация (в требованиях)", "salary": "Оплата (текстом)", "salary_min": "Оплата от", "salary_max": "Оплата до", "term.text": "Премии", "benefit": "Льготы", "schedule": "График", "scheduleTypeComment": "Комментарий к графику", "shift": "Смены", "employment": "Тип занятости", "addresses.address[].location": "Адрес", "conditions": "Условия труда"};
+const FIELD_ORDER = Object.keys(FIELD_NAMES);
+const ALWAYS = ["job-name", "duty", "requirements", "salary_min", "salary_max", "schedule", "employment", "addresses.address[].location"];
+const S = {kind: "check", report: null, sel: null, q: "", fKind: null, fTopic: null, tab: "audit", resumes: [], resumeId: null};
+const $ = id => document.getElementById(id);
+const put = (node, ...kids) => node.replaceChildren(...kids.flat().filter(k => k !== null && k !== undefined && k !== false));
+
+function el(tag, attrs, ...kids) {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v === null || v === undefined || v === false) continue;
+    if (k === "class") n.className = v; else if (k === "text") n.textContent = v;
+    else if (k.startsWith("on")) n.addEventListener(k.slice(2), v); else n.setAttribute(k, v === true ? "" : v);
+  }
+  for (const c of kids.flat()) if (c !== null && c !== undefined && c !== false) n.append(c);
+  return n;
+}
+function safeUrl(u) { try { const x = new URL(u); return x.protocol === "https:" || x.protocol === "http:" ? x.href : null; } catch { return null; } }
+function plural(n, a, b, c) { const m = Math.abs(n) % 100, k = m % 10; return m > 10 && m < 20 ? c : k === 1 ? a : k > 1 && k < 5 ? b : c; }
+function banner(text, info) { const b = $("banner"); b.textContent = text || ""; b.className = "banner" + (text ? " show" : "") + (info ? " info" : ""); }
+
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  let data = null;
+  try { data = await r.json(); } catch { /* пустой ответ */ }
+  if (!r.ok) { const e = new Error((data && data.detail) || ("Ошибка " + r.status)); e.data = data; throw e; }
+  return data;
+}
+async function busy(btn, fn) {
+  btn.classList.add("busy"); btn.disabled = true;
+  try { await fn(); } catch (e) { banner(e.message); if (e.data && e.data.report) setReport(e.data.report); } finally { btn.classList.remove("busy"); btn.disabled = false; }
+}
+
+function counts(v) { const c = {contradiction: 0, ambiguous: 0, missing: 0}; for (const f of v.findings || []) if (f.kind in c) c[f.kind]++; return c; }
+function visible() {
+  const q = S.q.trim().toLowerCase();
+  return (S.report ? S.report.vacancies : []).filter(v => {
+    if (q && !((v.title || "") + " " + (v.company || "") + " " + v.id).toLowerCase().includes(q)) return false;
+    const fs = v.findings || [];
+    if (S.fKind === "clean") return fs.length === 0;
+    if (S.fKind && !fs.some(f => f.kind === S.fKind)) return false;
+    if (S.fTopic && !fs.some(f => f.topic === S.fTopic)) return false;
+    return true;
+  });
+}
+
+function setReport(rep) {
+  S.report = rep;
+  const vs = rep.vacancies || [];
+  if (!vs.some(v => v.id === S.sel)) S.sel = (vs.find(v => (v.findings || []).length) || vs[0] || {}).id || null;
+  render();
+}
+function render() { renderSummary(); renderFilters(); renderList(); renderDetail(); }
+
+function renderSummary() {
+  const vs = S.report ? S.report.vacancies : [];
+  const bad = vs.filter(v => (v.findings || []).length).length;
+  const total = vs.reduce((n, v) => n + (v.findings || []).length, 0);
+  $("sTotal").textContent = S.report ? vs.length : "—";
+  $("sClean").textContent = S.report ? vs.length - bad : "—";
+  $("sBad").textContent = S.report ? bad : "—";
+  $("sFind").textContent = S.report ? total : "—";
+  const by = {}; let max = 1;
+  for (const t in TOPICS) by[t] = {contradiction: 0, ambiguous: 0, missing: 0, n: 0};
+  for (const v of vs) for (const f of v.findings || []) if (by[f.topic]) { by[f.topic][f.kind]++; by[f.topic].n++; }
+  for (const t in by) max = Math.max(max, by[t].n);
+  $("topics").replaceChildren(...Object.keys(TOPICS).map(t => el("button", {class: "topic-row", "aria-pressed": String(S.fTopic === t), title: "Показать вакансии с замечаниями по этой теме",
+    onclick: () => { S.fTopic = S.fTopic === t ? null : t; render(); }},
+    el("span", {text: TOPICS[t]}),
+    el("span", {class: "track"}, ...Object.keys(KINDS).map(k => el("u", {class: "k-" + k, style: "width:" + (by[t][k] / max * 100) + "%"}))),
+    el("span", {class: "num", text: String(by[t].n)}))));
+}
+function renderFilters() {
+  const opts = [[null, "все"], ["contradiction", "противоречия"], ["ambiguous", "неоднозначности"], ["missing", "пропуски"], ["clean", "понятные"]];
+  $("kindFilters").replaceChildren(...opts.map(([k, name]) => el("button", {class: "pill", "aria-pressed": String(S.fKind === k), onclick: () => { S.fKind = k; renderFilters(); renderList(); }},
+    k ? el("span", {class: "dot " + k}) : null, name)));
+}
+function renderList() {
+  const vs = visible();
+  if (!S.report) return $("list").replaceChildren(el("div", {class: "empty", text: S.kind === "latest" ? "Отчёта по вакансиям с портала ещё нет. Нажмите «Загрузить с портала»." : "Отчёта ещё нет. Нажмите «Проверить учебный набор»."}));
+  if (!vs.length) return $("list").replaceChildren(el("div", {class: "empty", text: "Под эти условия вакансий нет"}));
+  $("list").replaceChildren(...vs.map(v => {
+    const c = counts(v), n = (v.findings || []).length;
+    return el("button", {class: "item", "aria-current": String(v.id === S.sel), onclick: () => { S.sel = v.id; S.tab = S.tab === "resume" ? "resume" : "audit"; renderList(); renderDetail(); }},
+      el("span", {class: "t", text: v.title || "(без названия)"}),
+      el("span", {class: "marks"}, n === 0 ? el("span", {class: "count clean", text: "понятна"}) : Object.keys(KINDS).filter(k => c[k]).map(k => el("span", {class: "count " + k, title: KINDS[k], text: String(c[k])}))),
+      el("span", {class: "c", text: [v.company, v.id].filter(Boolean).join(" · ")}));
+  }));
+}
+
+function highlight(text, marks) {
+  // marks: [{start, end, kind, idx}] без пересечений; текст вставляется только как текст
+  const out = []; let pos = 0;
+  for (const m of marks.sort((a, b) => a.start - b.start)) {
+    if (m.start < pos) continue;
+    if (m.start > pos) out.push(text.slice(pos, m.start));
+    out.push(el("mark", {class: m.kind, "data-f": m.idx, title: "Показать замечание", onclick: () => focusFinding(m.idx), text: text.slice(m.start, m.end)}));
+    pos = m.end;
+  }
+  if (pos < text.length) out.push(text.slice(pos));
+  return out;
+}
+function focusFinding(i) {
+  document.querySelectorAll(".finding.active, mark.active").forEach(n => n.classList.remove("active"));
+  const card = document.querySelector('.finding[data-f="' + i + '"]');
+  if (card) { card.classList.add("active"); card.scrollIntoView({block: "nearest", behavior: "smooth"}); }
+  document.querySelectorAll('mark[data-f="' + i + '"]').forEach(n => n.classList.add("active"));
+}
+function copyText(text, btn) {
+  const done = () => { const old = btn.textContent; btn.textContent = "скопировано"; setTimeout(() => btn.textContent = old, 1200); };
+  if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, () => {}); else done();
+}
+
+function renderDetail() {
+  const v = S.report && S.report.vacancies.find(x => x.id === S.sel);
+  if (!v) return $("detail").replaceChildren(el("div", {class: "empty", text: S.report ? "Выберите вакансию слева" : "Здесь появится разбор вакансии"}));
+  const fs = v.findings || [], url = safeUrl(v.url);
+  const head = el("div", {class: "d-head"},
+    el("div", {}, el("h2", {text: v.title || "(без названия)"}),
+      el("div", {class: "sub"}, [v.company, "ID " + v.id].filter(Boolean).join(" · "), url ? " · " : null, url ? el("a", {href: url, target: "_blank", rel: "noopener noreferrer", text: "карточка на портале"}) : null)),
+    el("div", {class: "d-actions"}, fs.length ? el("button", {class: "btn", onclick: e => copyText("Вакансия «" + (v.title || v.id) + "»" + (url ? " (" + url + ")" : "") + "\n\n" + fs.map((f, i) => (i + 1) + ". " + f.recommendation).join("\n"), e.currentTarget), text: "Скопировать вопросы работодателю"}) : null));
+  const tabs = el("div", {class: "tabs", role: "tablist"},
+    el("button", {role: "tab", "aria-selected": String(S.tab === "audit"), onclick: () => { S.tab = "audit"; renderDetail(); }, text: "Разбор вакансии"}),
+    el("button", {role: "tab", "aria-selected": String(S.tab === "resume"), onclick: () => { S.tab = "resume"; renderDetail(); }, text: "Резюме под вакансию"}));
+  $("detail").replaceChildren(head, tabs, S.tab === "resume" ? resumeView(v) : auditView(v));
+}
+
+function auditView(v) {
+  const fs = v.findings || [], fields = v.fields || {};
+  const marksBy = {}, missing = {};
+  fs.forEach((f, i) => {
+    const pairs = [[f.field, f.quote]]; if (f.conflict_with) pairs.push([f.conflict_with.field, f.conflict_with.quote]);
+    for (const [fld, q] of pairs) {
+      if (!q) { missing[fld] = i; continue; }
+      const text = String(fields[fld] || ""), at = text.indexOf(q);
+      if (at >= 0) (marksBy[fld] = marksBy[fld] || []).push({start: at, end: at + q.length, kind: f.kind, idx: i});
+    }
+  });
+  const shown = FIELD_ORDER.filter(f => fields[f] || ALWAYS.includes(f) || f in missing);
+  const card = el("dl", {style: "margin:0"}, shown.map(f => {
+    const has = fields[f] !== undefined && fields[f] !== "";
+    return el("div", {class: "frow" + (has ? "" : " absent")},
+      el("dt", {}, FIELD_NAMES[f], el("small", {class: "mono", text: f})),
+      el("dd", {}, has ? highlight(String(fields[f]), marksBy[f] || []) : (f in missing ? el("span", {class: "gap-flag", style: "cursor:pointer", onclick: () => focusFinding(missing[f]), text: "не указано — см. замечание"}) : "не указано")));
+  }));
+  const list = fs.length ? fs.map((f, i) => el("article", {class: "finding " + f.kind, "data-f": i, onmouseenter: () => document.querySelectorAll('mark[data-f="' + i + '"]').forEach(n => n.classList.add("active")), onmouseleave: () => document.querySelectorAll("mark.active").forEach(n => n.classList.remove("active"))},
+      el("div", {class: "f-top"}, el("span", {class: "kind " + f.kind, text: KINDS[f.kind] || f.kind}), el("span", {class: "f-topic", text: TOPICS[f.topic] || f.topic}),
+        el("span", {class: "src" + (f.source === "llm" ? " llm" : ""), title: f.source === "llm" ? "Замечание нашла модель" : "Замечание найдено правилом", text: f.source === "llm" ? "модель" : "правило"})),
+      el("div", {text: f.problem}),
+      f.quote ? el("div", {class: "quote"}, el("small", {class: "mono", text: f.field}), "«" + f.quote + "»") : el("div", {class: "quote"}, el("small", {class: "mono", text: f.field}), el("span", {class: "gap-flag", text: "поле пустое"})),
+      f.conflict_with ? [el("div", {class: "vs", text: "ПРОТИВ"}), el("div", {class: "quote"}, el("small", {class: "mono", text: f.conflict_with.field}), "«" + f.conflict_with.quote + "»")] : null,
+      el("div", {class: "rec"}, el("p", {}, el("b", {text: "Что уточнить. "}), f.recommendation), el("button", {class: "copy", onclick: e => copyText(f.recommendation, e.currentTarget), text: "копировать"}))))
+    : [el("div", {class: "clean-box", text: "Условия описаны понятно: пропусков, неоднозначностей и противоречий не найдено."})];
+  return el("div", {class: "d-body"},
+    el("div", {class: "col"}, el("h3", {text: fs.length ? "Замечания · " + fs.length : "Замечания"}), list, v.error ? el("div", {class: "note", text: "Анализ этой вакансии завершился сбоем: " + v.error}) : null),
+    el("div", {class: "col"}, el("h3", {text: "Что написано в вакансии"}), card));
+}
+
+function resumeView(v) {
+  const box = el("div", {class: "resume"});
+  const sel = el("select", {"aria-label": "Резюме соискателя", onchange: e => { S.resumeId = e.target.value; load(); }}, S.resumes.map(r => el("option", {value: r.id, selected: r.id === S.resumeId, text: r.label + " · " + r.city})));
+  const out = el("div", {style: "display:grid;gap:14px"});
+  box.append(el("div", {class: "row"}, el("span", {class: "note", text: "Вымышленное резюме:"}), sel),
+    el("div", {class: "note", text: "Черновик собирается только из того, что есть в исходном резюме: навыки и опыт переставляются по близости к вакансии, ничего не дописывается."}), out);
+  async function load() {
+    if (!S.resumeId) return;
+    try {
+      const d = await api("/api/resume?resume_id=" + encodeURIComponent(S.resumeId) + "&vacancy_id=" + encodeURIComponent(v.id) + "&kind=" + S.kind, {method: "POST"});
+      const dr = d.draft;
+      put(out, 
+        el("div", {class: "card"}, el("h4", {text: "Совпадение с вакансией"}), el("div", {text: "Навыков из резюме, близких к вакансии: " + d.match.skills_matched + " из " + d.match.skills_total + "; пунктов опыта: " + d.match.duties_matched + "."})),
+        el("div", {class: "two"},
+          el("div", {class: "card"}, el("h4", {text: "Навыки — сначала близкие к вакансии"}), el("div", {class: "tags"}, dr.skills_first.map(s => el("span", {class: "tag hit", text: s})), dr.skills_other.map(s => el("span", {class: "tag", text: s})))),
+          el("div", {class: "card"}, el("h4", {text: "Образование и опыт"}), el("div", {text: dr.education.level + " — " + dr.education.details}), el("div", {class: "note", text: "Опыт работы, лет: " + dr.experience_years}))),
+        el("div", {class: "card"}, el("h4", {text: "Опыт работы"}), dr.work.map(w => el("div", {}, el("b", {text: w.role}), " · " + w.company + " · " + w.period, el("ul", {}, w.duties.map((x, i) => el("li", {class: i < w.relevant ? "hit" : "", text: x})))))),
+        d.not_confirmed.length ? el("div", {class: "card"}, el("h4", {text: "Чего требует вакансия, а резюме не подтверждает"}), el("ul", {}, d.not_confirmed.map(x => el("li", {text: x})))) : null,
+        d.cautions.length ? el("div", {class: "card"}, el("h4", {text: "Противоречия в самой вакансии — уточните до отклика"}), el("ul", {}, d.cautions.map(x => el("li", {text: x})))) : null,
+        d.questions_for_employer.length ? el("div", {class: "card"}, el("h4", {text: "Вопросы работодателю до отклика"}), el("ul", {}, d.questions_for_employer.map(x => el("li", {text: x})))) : null,
+        el("div", {class: "card"}, el("h4", {text: "Черновик сопроводительного письма"}), el("div", {text: d.cover_letter}), el("div", {style: "margin-top:8px"}, el("button", {class: "copy", onclick: e => copyText(d.cover_letter, e.currentTarget), text: "копировать"}))));
+    } catch (e) { out.replaceChildren(el("div", {class: "note", text: e.message})); }
+  }
+  load();
+  return box;
+}
+
+async function loadReport() {
+  banner("");
+  $("jsonLink").href = "/api/report?kind=" + S.kind;
+  try { setReport(await api("/api/report?kind=" + S.kind)); }
+  catch { S.report = null; S.sel = null; render(); }
+}
+function switchKind(kind) {
+  S.kind = kind; S.fKind = null; S.fTopic = null; S.q = ""; $("q").value = "";
+  $("segCheck").setAttribute("aria-pressed", String(kind === "check")); $("segLatest").setAttribute("aria-pressed", String(kind === "latest"));
+  $("actionsCheck").style.display = kind === "check" ? "contents" : "none"; $("actionsLatest").style.display = kind === "latest" ? "contents" : "none";
+  loadReport();
+}
+
+$("segCheck").onclick = () => switchKind("check");
+$("segLatest").onclick = () => switchKind("latest");
+$("q").oninput = e => { S.q = e.target.value; renderList(); };
+$("btnSample").onclick = e => busy(e.currentTarget, async () => { banner(""); setReport(await api("/api/check-sample", {method: "POST"})); });
+$("btnUpload").onclick = () => $("file").click();
+$("file").onchange = e => { const f = e.target.files[0]; if (!f) return; busy($("btnUpload"), async () => { banner(""); setReport(await api("/api/check?name=" + encodeURIComponent(f.name), {method: "POST", headers: {"Content-Type": "application/json"}, body: await f.text()})); }); e.target.value = ""; };
+$("btnRun").onclick = e => busy(e.currentTarget, async () => { banner("Загружаю вакансии с портала — страница из ста вакансий приходит около 15 секунд…", true); setReport(await api("/api/run?max_vacancies=" + encodeURIComponent($("maxV").value || 200), {method: "POST"})); banner(""); });
+$("themeBtn").onclick = () => { const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches; const t = dark ? "light" : "dark"; document.documentElement.dataset.theme = t; try { localStorage.setItem("pv-theme", t); } catch { /* без хранилища */ } };
+try { const t = localStorage.getItem("pv-theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch { /* без хранилища */ }
+
+(async () => {
+  try {
+    const st = await api("/api/status");
+    const chip = $("modelChip");
+    chip.lastElementChild.textContent = st.model ? "модель: " + st.model.model + " (" + st.model.provider + ")" : "модель не подключена — работают правила";
+    chip.classList.toggle("on", !!st.model);
+    $("maxV").value = st.max_vacancies;
+    if (st.last_error) banner("Последняя загрузка с портала не удалась: " + st.last_error.error + ". Показан последний успешный отчёт.");
+  } catch { /* статус необязателен */ }
+  try { S.resumes = await api("/api/resumes"); S.resumeId = (S.resumes[0] || {}).id || null; } catch { /* без сценария */ }
+  await loadReport();
+  if (!S.report && S.kind === "check") $("btnSample").click();
+})();
+</script>
+</body>
+</html>

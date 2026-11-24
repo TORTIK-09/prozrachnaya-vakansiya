@@ -1,16 +1,23 @@
-"""Анализатор вакансии. ЗАГЛУШКА части 1: замечаний не находит.
-
-Здесь разработчик 2 размещает настоящий анализатор (см. docs/spec/02-analyzer.md).
-Подпись функции — граница между частями, её менять нельзя.
+"""Анализатор вакансии: правила находят пропуски и расхождения полей, модель — размытые формулировки
+и смысловые противоречия. Подпись analyze — граница между частями проекта, её менять нельзя.
 """
 from __future__ import annotations
 
-from ..models import Finding, LLM, Vacancy
+from ..models import TOPICS, Finding, LLM, Vacancy
+from . import ai, rules
 
-# Версия входит в отпечаток кэша: после изменения правил или запросов к модели увеличьте её,
+# Версия входит в отпечаток кэша: после изменения правил или запроса к модели увеличьте её,
 # иначе рабочий режим отдаст старые результаты из кэша.
-VERSION = "0-stub"
+VERSION = "1"
 
 
 def analyze(v: Vacancy, llm: LLM | None = None) -> list[Finding]:
-    return []
+    found = rules.check(v)
+    if llm is not None:
+        try:
+            found += ai.find(v, llm, found)
+        except Exception:
+            # модель недоступна или ответила мусором: остаются замечания правил
+            pass
+    order = {t: i for i, t in enumerate(TOPICS)}
+    return sorted(found, key=lambda f: order.get(f.topic, 99))
