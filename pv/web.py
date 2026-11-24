@@ -1,4 +1,4 @@
-"""Веб-панель: просмотр отчёта, запуск проверок, сценарий с резюме. Запуск: `python -m pv web`.
+"""Веб-панель: просмотр отчёта, запуск проверок, сценарий с резюме, статистика. Запуск: `python -m pv web`.
 
 Панель рассчитана на работу на своём компьютере: слушает 127.0.0.1, принимает запросы только с собственного
 адреса и не принимает путей к файлам — только содержимое загруженного JSON.
@@ -7,12 +7,15 @@ from __future__ import annotations
 
 import json
 import threading
+from dataclasses import replace
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
-from . import cli, config as config_mod, report, source
+from . import calibrate, cli, config as config_mod, report, source
+from .analyze import profile
 from .config import ROOT
 from .extra import resume as resume_mod
 
@@ -22,17 +25,39 @@ MAX_UPLOAD = 20 * 1024 * 1024
 LOCAL_HOSTS = {"127.0.0.1", "localhost", "[::1]"}
 
 
-def create_app(cfg: config_mod.Config | None = None) -> FastAPI:
+def create_app(cfg: config_mod.Config | None = None, auto_calibrate: bool = True) -> FastAPI:
     cfg = cfg or config_mod.load()
     app = FastAPI(title="Прозрачная вакансия", docs_url=None, redoc_url=None, openapi_url=None)
     lock = threading.Lock()                 # проверки идут по одной: модель и кэш общие
     state: dict = {"llm": None, "llm_ready": False}
+    job = calibrate.Job(cfg.reports)
 
     def llm():
         if not state["llm_ready"]:
             state["llm"] = cli.make_llm(cfg, True)
             state["llm_ready"] = True
         return state["llm"]
+
+    def model_profile():
+        model = llm()
+        return profile.load(model.describe(), cfg.reports) if model else None
+
+    def calibration() -> dict:
+        """Состояние настройки модели. Незнакомая модель настраивается сама при первом обращении."""
+        model = llm()
+        if model is None:
+            return {"state": "no_model"}
+        st = job.status()
+        if st["state"] in ("running", "failed", "done"):
+            return st
+        prof = model_profile()
+        if prof is not None:
+            return {"state": "ready", "model": prof.get("model"), "finished_at": prof.get("calibrated_at"),
+                    "shipped": bool(prof.get("_shipped")), "blocked": len(prof.get("blocked", []))}
+        if auto_calibrate:
+            job.start(model)
+            return job.status()
+        return {"state": "needed", "model": model.describe()}
 
     @app.middleware("http")
     async def guard(request: Request, call_next):
@@ -66,9 +91,15 @@ def create_app(cfg: config_mod.Config | None = None) -> FastAPI:
         except (ValueError, OSError):
             return None
 
+    app.mount("/static", StaticFiles(directory=STATIC), name="static")
+
     @app.get("/")
     def index():
         return FileResponse(STATIC / "index.html", headers={"Cache-Control": "no-cache"})
+
+    @app.get("/stats")
+    def stats_page():
+        return FileResponse(STATIC / "stats.html", headers={"Cache-Control": "no-cache"})
 
     @app.get("/api/status")
     def status():
@@ -82,7 +113,28 @@ def create_app(cfg: config_mod.Config | None = None) -> FastAPI:
             except (ValueError, OSError):
                 error = None
         return {"source_url": cfg.source_url, "schedule": cfg.schedule, "max_vacancies": cfg.max_vacancies,
-                "model": info, "has_latest": (cfg.reports / "latest.json").is_file(), "last_error": error}
+                "model": info, "has_latest": (cfg.reports / "latest.json").is_file(), "last_error": error,
+                "calibration": calibration()}
+
+    @app.get("/api/calibration")
+    def get_calibration():
+        return calibration()
+
+    @app.post("/api/calibration")
+    def start_calibration():
+        """Настроить модель заново."""
+        model = llm()
+        if model is None:
+            raise HTTPException(409, "Модель не подключена")
+        job.start(model)
+        return job.status()
+
+    @app.get("/api/stats")
+    def stats():
+        """Сравнение способов работы: только правила, только модель, вместе."""
+        prof = model_profile()
+        data = prof if prof is not None else calibrate.rules_only()
+        return {"stats": data, "calibration": calibration()}
 
     @app.get("/api/report")
     def get_report(kind: str = "check"):
@@ -121,7 +173,6 @@ def create_app(cfg: config_mod.Config | None = None) -> FastAPI:
     @app.post("/api/run")
     def run_live(max_vacancies: int | None = None):
         """Ручной запуск рабочего режима — тот же код, что по расписанию."""
-        from dataclasses import replace
         run_cfg = cfg
         if max_vacancies is not None:
             if not 1 <= max_vacancies <= 5000:

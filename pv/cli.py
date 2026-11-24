@@ -42,7 +42,13 @@ def make_llm(cfg: config_mod.Config, enabled: bool) -> LLM | None:
         log(f"модель недоступна ({type(e).__name__}: {e}): работают только правила")
         return None
     if client is None:
-        log("модель не настроена: работают только правила")
+        log("модель не подключена: работают только правила")
+        return None
+    from .analyze import profile
+    info = client.describe()
+    if profile.load(info, cfg.reports) is None:
+        log(f"модель {info.get('model')} сервису незнакома: её замечания берутся без настройки. "
+            "Настроить: python -m pv calibrate (панель делает это сама)")
     return client
 
 
@@ -148,6 +154,33 @@ def cmd_web(cfg: config_mod.Config, port: int | None = None) -> int:
     return 0
 
 
+def cmd_calibrate(cfg: config_mod.Config) -> int:
+    """Настройка модели под задачу и сравнение способов работы (см. pv/calibrate.py)."""
+    from . import calibrate
+    llm = make_llm(cfg, True)
+    if llm is None:
+        log("ОШИБКА: модель не подключена — настраивать нечего")
+        return 2
+    info = llm.describe()
+    log(f"настройка модели {info.get('model')} ({info.get('provider')}): один запрос на каждую размеченную вакансию")
+
+    def progress(done: int, total: int, sec: float) -> None:
+        log(f"  {done} из {total}, осталось примерно {round(sec * (total - done) / 60)} мин")
+
+    result = calibrate.run(llm, progress)
+    if result["errors"] >= result["vacancies"]:
+        log("ОШИБКА: модель не ответила ни на один запрос")
+        return 2
+    path = calibrate.save(result, cfg.reports)
+    for st in result["sets"]:
+        m = st["modes"]
+        log(f"{st['title']}: правила {m['rules']['must_found']}/{m['rules']['must_total']}, "
+            f"модель {m['llm']['must_found']}/{m['llm']['must_total']}, вместе {m['both']['must_found']}/{m['both']['must_total']}; "
+            f"лишних: {m['rules']['extra_total']} / {m['llm']['extra_total']} / {m['both']['extra_total']}")
+    log(f"отключено видов замечаний модели: {len(result['blocked'])}; профиль: {path}")
+    return 0
+
+
 def cmd_resume(cfg: config_mod.Config, resume_id: str, vacancy_id: str, report_path: str, out: str | None) -> int:
     """Свой сценарий: черновик резюме под вакансию из готового отчёта."""
     import json
@@ -189,6 +222,7 @@ def main(argv: list[str] | None = None) -> int:
     p_sched = sub.add_parser("schedule", help="работать постоянно и запускать рабочий режим по расписанию")
     p_web = sub.add_parser("web", help="веб-панель для просмотра отчёта")
     p_web.add_argument("--port", type=int, help="порт (иначе из настроек, по умолчанию 8085)")
+    sub.add_parser("calibrate", help="настроить подключённую модель под задачу и сравнить её с правилами")
     p_res = sub.add_parser("resume", help="свой сценарий: черновик резюме под вакансию из отчёта")
     p_res.add_argument("--resume", default="RES-01", help="ID резюме из examples/sample_resumes.json")
     p_res.add_argument("--vacancy", required=True, help="ID вакансии из отчёта")
@@ -215,6 +249,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_check(cfg, a.file, a.out, not a.no_llm, a.cache)
     if a.cmd == "web":
         return cmd_web(cfg, a.port)
+    if a.cmd == "calibrate":
+        return cmd_calibrate(cfg)
     if a.cmd == "resume":
         return cmd_resume(cfg, a.resume, a.vacancy, a.report, a.out)
     return cmd_schedule(cfg, not a.no_llm)

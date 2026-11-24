@@ -13,7 +13,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(cli, "make_llm", lambda c, enabled: None)
     monkeypatch.setattr(cli, "log", lambda m: None)
     cfg = config.Config(reports_dir=str(tmp_path / "reports"))
-    return TestClient(web.create_app(cfg), base_url="http://127.0.0.1:8085"), cfg
+    return TestClient(web.create_app(cfg, auto_calibrate=False), base_url="http://127.0.0.1:8085"), cfg
 
 
 def test_page_and_status(client):
