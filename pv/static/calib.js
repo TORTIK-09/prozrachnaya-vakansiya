@@ -1,7 +1,7 @@
 "use strict";
 // Уведомление о настройке модели: общее для страниц «Отчёт» и «Статистика».
-// Пока настройка идёт — полоса с оценкой оставшегося времени; по окончании её сменяет сообщение об итоге,
-// которое не исчезает само: его закрывает человек кнопкой.
+// Страница сама следит за состоянием: когда настройка началась, идёт или закончилась, уведомление и подпись
+// модели в шапке меняются без перезагрузки. Итоговое сообщение не исчезает само: его закрывает человек кнопкой.
 function calibDuration(sec) {
   if (sec === null || sec === undefined) return "оцениваю время…";
   if (sec < 60) return "меньше минуты";
@@ -12,7 +12,22 @@ function calibDuration(sec) {
 function calibModel(c) { return c.model && c.model.model ? "«" + c.model.model + "»" : ""; }
 function calibKey(c) { return "pv-calib-closed:" + (c.model ? c.model.provider + "/" + c.model.model : "") + ":" + (c.finished_at || ""); }
 
-function showCalibration(c, onDone) {
+function showModelChip(c) {
+  const chip = document.getElementById("modelChip");
+  if (!chip) return;
+  const name = c.model && c.model.model ? c.model.model + " (" + c.model.provider + ")" : "";
+  const text = {
+    no_model: "модель не подключена — работают правила",
+    running: "модель: " + name + " — настраивается",
+    needed: "модель: " + name + " — не настроена",
+    failed: "модель: " + name + " — без настройки",
+  }[c.state] || ("модель: " + name);
+  chip.lastElementChild.textContent = text;
+  chip.classList.toggle("on", c.state === "ready" || c.state === "done");
+}
+
+function showCalibration(c) {
+  showModelChip(c);
   const box = document.getElementById("calib");
   if (!box) return;
   const title = document.getElementById("calibTitle"), sub = document.getElementById("calibSub");
@@ -24,8 +39,8 @@ function showCalibration(c, onDone) {
   if (c.state === "running") {
     box.classList.add("show");
     title.textContent = "Модель " + calibModel(c) + " настраивается под задачу — подождите, " + calibDuration(c.eta_seconds);
-    sub.textContent = (c.total ? "Проверено вакансий: " + c.done + " из " + c.total + ". " : "Модель загружается. ") + "Сервис встретил эту модель впервые и сверяет её ответы с размеченными вакансиями. Отчёты можно собирать уже сейчас.";
-    bar.style.width = (c.total ? Math.round(c.done / c.total * 100) : 3) + "%";
+    sub.textContent = (c.total ? "Проверено вакансий: " + c.done + " из " + c.total + ". " : "Модель загружается в память. ") + "Сервис встретил эту модель впервые и сверяет её ответы с размеченными вакансиями. Отчёты можно собирать уже сейчас.";
+    bar.style.width = (c.total ? Math.max(3, Math.round(c.done / c.total * 100)) : 3) + "%";
   } else if (c.state === "done" && !closed) {
     box.classList.add("show", "done");
     title.textContent = "Модель " + calibModel(c) + " настроена";
@@ -38,19 +53,20 @@ function showCalibration(c, onDone) {
     close.hidden = false;
   }
   close.onclick = () => { try { localStorage.setItem(calibKey(c), "1"); } catch { /* без хранилища */ } box.className = "notice"; };
-  if (c.state === "done" && onDone) onDone(c);
 }
 
-function watchCalibration(onDone) {
+// onChange(состояние, прежнее) вызывается при каждой смене состояния: началась, закончилась, подключилась модель.
+function watchCalibration(onChange) {
   let last = null;
   async function tick() {
     let c = null;
-    try { const r = await fetch("/api/calibration"); if (r.ok) c = await r.json(); } catch { /* сервер недоступен — попробуем позже */ }
+    try { const r = await fetch("/api/calibration", {cache: "no-store"}); if (r.ok) c = await r.json(); } catch { /* сервер недоступен — попробуем позже */ }
     if (c) {
-      showCalibration(c, last === "running" ? onDone : null);
+      showCalibration(c);
+      if (last !== null && c.state !== last && onChange) onChange(c, last);
       last = c.state;
     }
-    setTimeout(tick, c && c.state === "running" ? 4000 : 20000);
+    setTimeout(tick, c && c.state === "running" ? 3000 : 5000);
   }
   tick();
 }

@@ -69,6 +69,8 @@ def create_app(cfg: config_mod.Config | None = None, auto_calibrate: bool = True
             if origin and origin.split("://", 1)[-1].rsplit(":", 1)[0] not in LOCAL_HOSTS:
                 return JSONResponse({"detail": "Запрос с чужого сайта отклонён"}, status_code=403)
         response = await call_next(request)
+        if request.url.path.startswith("/static/"):
+            response.headers["Cache-Control"] = "no-cache"     # после обновления сервиса браузер берёт свежие файлы
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Content-Security-Policy"] = (

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Прозрачная вакансия</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23173a3a'/%3E%3Ccircle cx='14' cy='14' r='6.5' fill='none' stroke='%23f2b441' stroke-width='2.6'/%3E%3Cpath d='m19 19 6 6' stroke='%23f4efe4' stroke-width='2.8' stroke-linecap='round'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="/static/app.css">
+<link rel="stylesheet" href="/static/app.css?v=2">
 </head>
 <body>
 <header class="top">
@@ -57,7 +57,7 @@
   <section class="pane detail" id="detail"><div class="empty">Выберите вакансию слева</div></section>
 </main>
 
-<script src="/static/calib.js"></script>
+<script src="/static/calib.js?v=2"></script>
 <script>
 "use strict";
 const TOPICS = {title: "Название должности", duties: "Обязанности", requirements: "Требования", salary: "Оплата", schedule: "График", location: "Место работы", employment: "Тип занятости"};
@@ -274,9 +274,6 @@ try { const t = localStorage.getItem("pv-theme"); if (t === "light" || t === "da
 (async () => {
   try {
     const st = await api("/api/status");
-    const chip = $("modelChip");
-    chip.lastElementChild.textContent = st.model ? "модель: " + st.model.model + " (" + st.model.provider + ")" : "модель не подключена — работают правила";
-    chip.classList.toggle("on", !!st.model);
     $("maxV").value = st.max_vacancies;
     if (st.last_error) banner("Последняя загрузка с портала не удалась: " + st.last_error.error + ". Показан последний успешный отчёт.");
   } catch { /* статус необязателен */ }
