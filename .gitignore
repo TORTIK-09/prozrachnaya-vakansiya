@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# отчёты и состояние собираются при запуске; пример отчёта лежит в examples/
+reports/
+data/
+
+# настройки с ключами
+.env
+config.toml
