@@ -18,9 +18,9 @@ function showModelChip(c) {
   const name = c.model && c.model.model ? c.model.model + " (" + c.model.provider + ")" : "";
   const text = {
     no_model: "модель не подключена — работает Системный AI",
-    running: "модель: " + name + " — настраивается",
-    needed: "модель: " + name + " — не настроена",
-    failed: "модель: " + name + " — без настройки",
+    running: "модель: " + name + " — калибруется",
+    needed: "модель: " + name + " — не откалибрована",
+    failed: "модель: " + name + " — без калибровки",
   }[c.state] || ("модель: " + name);
   chip.lastElementChild.textContent = text;
   chip.classList.toggle("on", c.state === "ready" || c.state === "done");
@@ -38,18 +38,18 @@ function showCalibration(c) {
   close.hidden = true; if (link) link.hidden = true;
   if (c.state === "running") {
     box.classList.add("show");
-    title.textContent = "Модель " + calibModel(c) + " настраивается под задачу — подождите, " + calibDuration(c.eta_seconds);
-    sub.textContent = (c.total ? "Проверено вакансий: " + c.done + " из " + c.total + ". " : "Модель загружается в память. ") + "Сервис встретил эту модель впервые и сверяет её ответы с размеченными вакансиями. Отчёты можно собирать уже сейчас.";
+    title.textContent = "ИИ калибруется: модель " + calibModel(c) + " — подождите, " + calibDuration(c.eta_seconds);
+    sub.textContent = (c.total ? "Проверено вакансий: " + c.done + " из " + c.total + ". " : "Модель загружается в память. ") + "Сервис встретил эту модель впервые: она разбирает размеченные вакансии, и по результату сервис решает, каким её ответам доверять. До конца калибровки в отчётах работает только Системный AI.";
     bar.style.width = (c.total ? Math.max(3, Math.round(c.done / c.total * 100)) : 3) + "%";
   } else if (c.state === "done" && !closed) {
     box.classList.add("show", "done");
-    title.textContent = "Модель " + calibModel(c) + " настроена";
+    title.textContent = "Калибровка ИИ завершена: модель " + calibModel(c);
     sub.textContent = "Проверено вакансий: " + c.vacancies + (c.errors ? ", без ответа: " + c.errors : "") + ". Отключено ненадёжных видов замечаний: " + c.blocked + ". В среднем " + c.seconds_per_vacancy + " с на вакансию.";
     close.hidden = false; if (link) link.hidden = false;
   } else if (c.state === "failed" && !closed) {
     box.classList.add("show", "failed");
-    title.textContent = "Настроить модель " + calibModel(c) + " не удалось";
-    sub.textContent = (c.error || "") + " Сервис продолжает работать: замечания модели используются без настройки.";
+    title.textContent = "Калибровка ИИ не удалась: модель " + calibModel(c);
+    sub.textContent = (c.error || "") + " Сервис продолжает работать: до успешной калибровки в отчётах работает только Системный AI.";
     close.hidden = false;
   }
   close.onclick = () => { try { localStorage.setItem(calibKey(c), "1"); } catch { /* без хранилища */ } box.className = "notice"; };

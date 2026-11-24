@@ -71,12 +71,12 @@ details ul { margin: 8px 0 0; padding-left: 20px; font-size: 13.5px; } details l
   <div id="out"><div class="box muted">Загружаю…</div></div>
 </main>
 
-<script src="/static/calib.js?v=4"></script>
+<script src="/static/calib.js?v=5"></script>
 <script>
 "use strict";
 const TOPICS = {title: "Название должности", duties: "Обязанности", requirements: "Требования", salary: "Оплата", schedule: "График", location: "Место работы", employment: "Тип занятости"};
 const KINDS = {contradiction: "противоречие", ambiguous: "неоднозначность", missing: "пропуск"};
-const MODES = [["rules", "Только Системный AI", "c-rules"], ["llm", "Только модель", "c-llm"], ["both_raw", "Вместе, до настройки модели", "c-both"], ["both", "Вместе, после настройки", "c-both"]];
+const MODES = [["rules", "Только Системный AI", "c-rules"], ["llm", "Только модель", "c-llm"], ["both_raw", "Вместе, до калибровки ИИ", "c-both"], ["both", "Вместе, после калибровки", "c-both"]];
 const $ = id => document.getElementById(id);
 function el(tag, attrs, ...kids) {
   const n = document.createElement(tag);
@@ -129,7 +129,7 @@ function verdict(d) {
   if (!d.model) {
     items.push("На учебном наборе организаторов Системный AI находит " + frac(s.rules) + " обязательных замечаний и дают " + s.rules.extra_total + " лишних — без модели.");
     items.push("На собственных примерах, где проблема выражена смыслом, Системный AI находит " + frac(x.rules) + ". Эти случаи Системному AI недоступны по устройству: он сверяет поля и шаблоны, а не смысл.");
-    items.push("Сравнение с моделью появится, когда модель будет подключена и настроена.");
+    items.push("Сравнение с моделью появится, когда модель будет подключена и откалибрована.");
     return items;
   }
   const t = d.seconds_per_vacancy;
@@ -147,15 +147,15 @@ function verdict(d) {
 
 function render(d, calib) {
   const out = [];
-  if (!d.model) out.push(el("section", {class: "box"}, el("b", {text: calib.state === "running" ? "Модель сейчас настраивается — полное сравнение появится здесь по окончании." : "Модель не подключена — показан только Системный AI."}), el("div", {class: "muted", text: "Чтобы увидеть сравнение, запустите Ollama или задайте адрес модели в настройках и откройте эту страницу снова."})));
+  if (!d.model) out.push(el("section", {class: "box"}, el("b", {text: calib.state === "running" ? "ИИ сейчас калибруется — полное сравнение появится здесь по окончании." : "Модель не подключена — показан только Системный AI."}), el("div", {class: "muted", text: "Чтобы увидеть сравнение, запустите Ollama или задайте адрес модели в настройках и откройте эту страницу снова."})));
   out.push(el("section", {class: "box verdict"}, el("h3", {text: "Что показывают числа"}), el("ul", {}, verdict(d).map(t => el("li", {text: t})))));
   for (const st of d.sets) out.push(setTable(st));
   if (d.model) {
     const t = d.seconds_per_vacancy;
     out.push(el("div", {class: "two-col"},
-      el("section", {class: "box"}, el("h3", {text: "Время на одну вакансию"}), el("p", {class: "about", text: "Замерено на этом компьютере при настройке модели."}),
+      el("section", {class: "box"}, el("h3", {text: "Время на одну вакансию"}), el("p", {class: "about", text: "Замерено на этом компьютере при калибровке ИИ."}),
         el("div", {class: "pair"}, el("div", {}, el("div", {class: "big", text: num(t.rules * 1000, 1) + " мс"}), el("small", {text: "Системный AI"})), el("div", {}, el("div", {class: "big", text: num(t.llm, 1) + " с"}), el("small", {text: "модель " + d.model.model})))),
-      el("section", {class: "box"}, el("h3", {text: "Настройка модели"}), el("p", {class: "about", text: "Сервис сверил ответы модели с разметкой и отключил виды замечаний, в которых она ошибается чаще, чем попадает. Веса модели не менялись: меняется то, какую часть её ответа сервис пускает в отчёт."}),
+      el("section", {class: "box"}, el("h3", {text: "Калибровка ИИ"}), el("p", {class: "about", text: "Сервис сверил ответы модели с разметкой и отключил виды замечаний, в которых она ошибается чаще, чем попадает. Веса модели не менялись: меняется то, какую часть её ответа сервис пускает в отчёт."}),
         d.categories.length ? el("div", {class: "scroll"}, el("table", {}, el("thead", {}, el("tr", {}, el("th", {text: "Вид замечаний модели"}), el("th", {class: "n", text: "Верных"}), el("th", {class: "n", text: "Лишних"}), el("th", {text: ""}))),
           el("tbody", {}, d.categories.map(c => el("tr", {}, el("td", {text: pairName([c.topic, c.kind])}), el("td", {class: "n", text: String(c.ok)}), el("td", {class: "n", text: String(c.extra)}), el("td", {}, el("span", {class: c.blocked ? "off" : "on", text: c.blocked ? "отключён" : "оставлен"}))))))) : el("div", {class: "muted", text: "Сверх Системного AI модель не предложила ни одного замечания."}),
         d.errors ? el("p", {class: "about", style: "margin-top:10px", text: "Запросов без ответа модели: " + d.errors + " из " + d.vacancies + "."}) : null)));
@@ -166,9 +166,9 @@ function render(d, calib) {
   out.push(el("section", {class: "box caveats"}, el("h3", {text: "Насколько этим числам можно верить"}), el("ul", {},
     el("li", {text: "Разметка обоих наборов наша. Эталон жюри нам неизвестен и может отличаться в спорных случаях."}),
     el("li", {text: "Правила писались с оглядкой на учебный набор, поэтому их результат на нём завышен. Честнее смотреть на собственные примеры — но и они составлены нами."}),
-    el("li", {text: "Строка «вместе, после настройки» посчитана на тех же вакансиях, по которым шла настройка. На новых данных результат будет хуже."}),
+    el("li", {text: "Строка «вместе, после калибровки» посчитана на тех же вакансиях, по которым шла калибровка. На новых данных результат будет хуже."}),
     el("li", {text: "Вакансий мало — двадцать две. Разница в одно-два замечания может быть случайной."}),
-    d.model ? el("li", {text: "Результат относится к модели " + d.model.model + " на этом компьютере. Другая модель покажет другие числа — сервис перенастраивается под неё сам."}) : null)));
+    d.model ? el("li", {text: "Результат относится к модели " + d.model.model + " на этом компьютере. Другая модель покажет другие числа — сервис калибрует её сам."}) : null)));
   const box = $("out");
   box.replaceChildren(...out);
   box.classList.remove("fade"); void box.offsetWidth; box.classList.add("fade");
