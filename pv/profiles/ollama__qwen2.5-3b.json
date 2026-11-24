@@ -1,0 +1,1511 @@
+{
+  "model": {
+    "provider": "ollama",
+    "model": "qwen2.5:3b"
+  },
+  "version": "9",
+  "calibrated_at": "2026-11-25T01:43:08+02:00",
+  "vacancies": 32,
+  "errors": 0,
+  "seconds_per_vacancy": {
+    "rules": 0.007,
+    "llm": 121.0
+  },
+  "categories": [
+    {
+      "topic": "duties",
+      "kind": "ambiguous",
+      "ok": 0,
+      "extra": 22,
+      "blocked": true
+    },
+    {
+      "topic": "employment",
+      "kind": "contradiction",
+      "ok": 0,
+      "extra": 2,
+      "blocked": true
+    },
+    {
+      "topic": "requirements",
+      "kind": "ambiguous",
+      "ok": 0,
+      "extra": 6,
+      "blocked": true
+    },
+    {
+      "topic": "schedule",
+      "kind": "ambiguous",
+      "ok": 0,
+      "extra": 1,
+      "blocked": true
+    },
+    {
+      "topic": "schedule",
+      "kind": "contradiction",
+      "ok": 2,
+      "extra": 4,
+      "blocked": true
+    }
+  ],
+  "blocked": [
+    [
+      "duties",
+      "ambiguous"
+    ],
+    [
+      "employment",
+      "contradiction"
+    ],
+    [
+      "requirements",
+      "ambiguous"
+    ],
+    [
+      "schedule",
+      "ambiguous"
+    ],
+    [
+      "schedule",
+      "contradiction"
+    ]
+  ],
+  "sets": [
+    {
+      "key": "sample",
+      "title": "Учебный набор организаторов",
+      "about": "Эталон для учебного набора examples/sample_vacancies.json. must — замечания, которые анализатор обязан найти; allowed — допустимые: не штрафуются ни когда найдены, ни когда пропущены. Запись — пара [тема, вид]. Разметка собственная: эталон жюри нам неизвестен.",
+      "agreement": {
+        "both": [
+          2,
+          2
+        ],
+        "rules_only": [
+          15,
+          15
+        ],
+        "llm_only": [
+          10,
+          0
+        ]
+      },
+      "modes": {
+        "rules": {
+          "vacancies": 10,
+          "must_total": 13,
+          "must_found": 13,
+          "found_total": 17,
+          "recall": 1.0,
+          "precision": 1.0,
+          "extra_total": 0,
+          "extra_per_10": 0.0,
+          "extra_on_clean": 0,
+          "rows": [
+            {
+              "id": "DEMO-39-001",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "DEMO-39-002",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "DEMO-39-003",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "DEMO-39-004",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "DEMO-39-005",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "DEMO-39-006",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "DEMO-39-007",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "DEMO-39-008",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "DEMO-39-009",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "DEMO-39-010",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            }
+          ]
+        },
+        "llm": {
+          "vacancies": 10,
+          "must_total": 13,
+          "must_found": 2,
+          "found_total": 12,
+          "recall": 0.154,
+          "precision": 0.167,
+          "extra_total": 10,
+          "extra_per_10": 10.0,
+          "extra_on_clean": 6,
+          "rows": [
+            {
+              "id": "DEMO-39-001",
+              "missed": [],
+              "extra": [
+                [
+                  "duties",
+                  "ambiguous"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "DEMO-39-002",
+              "missed": [
+                [
+                  "duties",
+                  "ambiguous"
+                ],
+                [
+                  "requirements",
+                  "ambiguous"
+                ],
+                [
+                  "salary",
+                  "missing"
+                ],
+                [
+                  "schedule",
+                  "ambiguous"
+                ]
+              ],
+              "extra": [
+                [
+                  "employment",
+                  "contradiction"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "DEMO-39-003",
+              "missed": [
+                [
+                  "requirements",
+                  "contradiction"
+                ]
+              ],
+              "extra": [
+                [
+                  "duties",
+                  "ambiguous"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "DEMO-39-004",
+              "missed": [
+                [
+                  "location",
+                  "contradiction"
+                ]
+              ],
+              "extra": [
+                [
+                  "employment",
+                  "contradiction"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "DEMO-39-005",
+              "missed": [],
+              "extra": [
+                [
+                  "duties",
+                  "ambiguous"
+                ],
+                [
+                  "requirements",
+                  "ambiguous"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "DEMO-39-006",
+              "missed": [
+                [
+                  "location",
+                  "ambiguous"
+                ],
+                [
+                  "schedule",
+                  "ambiguous"
+                ],
+                [
+                  "title",
+                  "ambiguous"
+                ]
+              ],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "DEMO-39-007",
+              "missed": [],
+              "extra": [
+                [
+                  "duties",
+                  "ambiguous"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "DEMO-39-008",
+              "missed": [
+                [
+                  "schedule",
+                  "contradiction"
+                ]
+              ],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "DEMO-39-009",
+              "missed": [],
+              "extra": [
+                [
+                  "duties",
+                  "ambiguous"
+                ],
+                [
+                  "schedule",
+                  "contradiction"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "DEMO-39-010",
+              "missed": [
+                [
+                  "location",
+                  "ambiguous"
+                ]
+              ],
+              "extra": [
+                [
+                  "duties",
+                  "ambiguous"
+                ]
+              ],
+              "absent": false
+            }
+          ]
+        },
+        "both_raw": {
+          "vacancies": 10,
+          "must_total": 13,
+          "must_found": 13,
+          "found_total": 27,
+          "recall": 1.0,
+          "precision": 0.63,
+          "extra_total": 10,
+          "extra_per_10": 10.0,
+          "extra_on_clean": 6,
+          "rows": [
+            {
+              "id": "DEMO-39-001",
+              "missed": [],
+              "extra": [
+                [
+                  "duties",
+                  "ambiguous"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "DEMO-39-002",
+              "missed": [],
+              "extra": [
+                [
+                  "employment",
+                  "contradiction"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "DEMO-39-003",
+              "missed": [],
+              "extra": [
+                [
+                  "duties",
+                  "ambiguous"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "DEMO-39-004",
+              "missed": [],
+              "extra": [
+                [
+                  "employment",
+                  "contradiction"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "DEMO-39-005",
+              "missed": [],
+              "extra": [
+                [
+                  "duties",
+                  "ambiguous"
+                ],
+                [
+                  "requirements",
+                  "ambiguous"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "DEMO-39-006",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "DEMO-39-007",
+              "missed": [],
+              "extra": [
+                [
+                  "duties",
+                  "ambiguous"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "DEMO-39-008",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "DEMO-39-009",
+              "missed": [],
+              "extra": [
+                [
+                  "duties",
+                  "ambiguous"
+                ],
+                [
+                  "schedule",
+                  "contradiction"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "DEMO-39-010",
+              "missed": [],
+              "extra": [
+                [
+                  "duties",
+                  "ambiguous"
+                ]
+              ],
+              "absent": false
+            }
+          ]
+        },
+        "both": {
+          "vacancies": 10,
+          "must_total": 13,
+          "must_found": 13,
+          "found_total": 17,
+          "recall": 1.0,
+          "precision": 1.0,
+          "extra_total": 0,
+          "extra_per_10": 0.0,
+          "extra_on_clean": 0,
+          "rows": [
+            {
+              "id": "DEMO-39-001",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "DEMO-39-002",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "DEMO-39-003",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "DEMO-39-004",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "DEMO-39-005",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "DEMO-39-006",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "DEMO-39-007",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "DEMO-39-008",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "DEMO-39-009",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "DEMO-39-010",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "key": "extra",
+      "title": "Смысловые расхождения",
+      "about": "Эталон для eval/extra_vacancies.json — собственные примеры с приёмами, которых нет в учебном наборе и которые не ловятся правилами: проблема выражена смыслом, а не ключевыми словами. По ним видно, что добавляет модель.",
+      "agreement": {
+        "both": [
+          2,
+          2
+        ],
+        "rules_only": [
+          5,
+          5
+        ],
+        "llm_only": [
+          14,
+          1
+        ]
+      },
+      "modes": {
+        "rules": {
+          "vacancies": 12,
+          "must_total": 8,
+          "must_found": 7,
+          "found_total": 7,
+          "recall": 0.875,
+          "precision": 1.0,
+          "extra_total": 0,
+          "extra_per_10": 0.0,
+          "extra_on_clean": 0,
+          "rows": [
+            {
+              "id": "EXTRA-01",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "EXTRA-02",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "EXTRA-03",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "EXTRA-04",
+              "missed": [
+                [
+                  "title",
+                  "contradiction"
+                ]
+              ],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "EXTRA-05",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "EXTRA-06",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "EXTRA-07",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "EXTRA-08",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "EXTRA-09",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "EXTRA-10",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "EXTRA-11",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "EXTRA-12",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            }
+          ]
+        },
+        "llm": {
+          "vacancies": 12,
+          "must_total": 8,
+          "must_found": 2,
+          "found_total": 16,
+          "recall": 0.25,
+          "precision": 0.188,
+          "extra_total": 13,
+          "extra_per_10": 10.833,
+          "extra_on_clean": 5,
+          "rows": [
+            {
+              "id": "EXTRA-01",
+              "missed": [],
+              "extra": [
+                [
+                  "duties",
+                  "ambiguous"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "EXTRA-02",
+              "missed": [],
+              "extra": [
+                [
+                  "duties",
+                  "ambiguous"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "EXTRA-03",
+              "missed": [
+                [
+                  "salary",
+                  "ambiguous"
+                ]
+              ],
+              "extra": [
+                [
+                  "requirements",
+                  "ambiguous"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "EXTRA-04",
+              "missed": [
+                [
+                  "title",
+                  "contradiction"
+                ]
+              ],
+              "extra": [
+                [
+                  "duties",
+                  "ambiguous"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "EXTRA-05",
+              "missed": [
+                [
+                  "employment",
+                  "contradiction"
+                ]
+              ],
+              "extra": [
+                [
+                  "duties",
+                  "ambiguous"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "EXTRA-06",
+              "missed": [
+                [
+                  "requirements",
+                  "contradiction"
+                ]
+              ],
+              "extra": [
+                [
+                  "duties",
+                  "ambiguous"
+                ],
+                [
+                  "requirements",
+                  "ambiguous"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "EXTRA-07",
+              "missed": [],
+              "extra": [
+                [
+                  "duties",
+                  "ambiguous"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "EXTRA-08",
+              "missed": [
+                [
+                  "location",
+                  "contradiction"
+                ]
+              ],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "EXTRA-09",
+              "missed": [],
+              "extra": [
+                [
+                  "duties",
+                  "ambiguous"
+                ],
+                [
+                  "schedule",
+                  "contradiction"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "EXTRA-10",
+              "missed": [],
+              "extra": [
+                [
+                  "requirements",
+                  "ambiguous"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "EXTRA-11",
+              "missed": [],
+              "extra": [
+                [
+                  "duties",
+                  "ambiguous"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "EXTRA-12",
+              "missed": [
+                [
+                  "requirements",
+                  "ambiguous"
+                ]
+              ],
+              "extra": [
+                [
+                  "duties",
+                  "ambiguous"
+                ]
+              ],
+              "absent": false
+            }
+          ]
+        },
+        "both_raw": {
+          "vacancies": 12,
+          "must_total": 8,
+          "must_found": 7,
+          "found_total": 21,
+          "recall": 0.875,
+          "precision": 0.381,
+          "extra_total": 13,
+          "extra_per_10": 10.833,
+          "extra_on_clean": 5,
+          "rows": [
+            {
+              "id": "EXTRA-01",
+              "missed": [],
+              "extra": [
+                [
+                  "duties",
+                  "ambiguous"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "EXTRA-02",
+              "missed": [],
+              "extra": [
+                [
+                  "duties",
+                  "ambiguous"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "EXTRA-03",
+              "missed": [],
+              "extra": [
+                [
+                  "requirements",
+                  "ambiguous"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "EXTRA-04",
+              "missed": [
+                [
+                  "title",
+                  "contradiction"
+                ]
+              ],
+              "extra": [
+                [
+                  "duties",
+                  "ambiguous"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "EXTRA-05",
+              "missed": [],
+              "extra": [
+                [
+                  "duties",
+                  "ambiguous"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "EXTRA-06",
+              "missed": [],
+              "extra": [
+                [
+                  "duties",
+                  "ambiguous"
+                ],
+                [
+                  "requirements",
+                  "ambiguous"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "EXTRA-07",
+              "missed": [],
+              "extra": [
+                [
+                  "duties",
+                  "ambiguous"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "EXTRA-08",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "EXTRA-09",
+              "missed": [],
+              "extra": [
+                [
+                  "duties",
+                  "ambiguous"
+                ],
+                [
+                  "schedule",
+                  "contradiction"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "EXTRA-10",
+              "missed": [],
+              "extra": [
+                [
+                  "requirements",
+                  "ambiguous"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "EXTRA-11",
+              "missed": [],
+              "extra": [
+                [
+                  "duties",
+                  "ambiguous"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "EXTRA-12",
+              "missed": [],
+              "extra": [
+                [
+                  "duties",
+                  "ambiguous"
+                ]
+              ],
+              "absent": false
+            }
+          ]
+        },
+        "both": {
+          "vacancies": 12,
+          "must_total": 8,
+          "must_found": 7,
+          "found_total": 7,
+          "recall": 0.875,
+          "precision": 1.0,
+          "extra_total": 0,
+          "extra_per_10": 0.0,
+          "extra_on_clean": 0,
+          "rows": [
+            {
+              "id": "EXTRA-01",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "EXTRA-02",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "EXTRA-03",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "EXTRA-04",
+              "missed": [
+                [
+                  "title",
+                  "contradiction"
+                ]
+              ],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "EXTRA-05",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "EXTRA-06",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "EXTRA-07",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "EXTRA-08",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "EXTRA-09",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "EXTRA-10",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "EXTRA-11",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "EXTRA-12",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "key": "holdout",
+      "title": "Контрольный набор",
+      "about": "Контрольный набор: десять вакансий с теми же видами смысловых расхождений, что в extra_vacancies.json, но в других формулировках. Написан после правил для смысловых расхождений и до их первого прогона на нём; правила по его результатам не правились. Нужен, чтобы видеть, насколько правила обобщаются, а не помнят примеры.",
+      "agreement": {
+        "both": [
+          3,
+          3
+        ],
+        "rules_only": [
+          4,
+          4
+        ],
+        "llm_only": [
+          13,
+          1
+        ]
+      },
+      "modes": {
+        "rules": {
+          "vacancies": 10,
+          "must_total": 7,
+          "must_found": 7,
+          "found_total": 7,
+          "recall": 1.0,
+          "precision": 1.0,
+          "extra_total": 0,
+          "extra_per_10": 0.0,
+          "extra_on_clean": 0,
+          "rows": [
+            {
+              "id": "HOLD-01",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "HOLD-02",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "HOLD-03",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "HOLD-04",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "HOLD-05",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "HOLD-06",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "HOLD-07",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "HOLD-08",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "HOLD-09",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "HOLD-10",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            }
+          ]
+        },
+        "llm": {
+          "vacancies": 10,
+          "must_total": 7,
+          "must_found": 3,
+          "found_total": 16,
+          "recall": 0.429,
+          "precision": 0.25,
+          "extra_total": 12,
+          "extra_per_10": 12.0,
+          "extra_on_clean": 5,
+          "rows": [
+            {
+              "id": "HOLD-01",
+              "missed": [],
+              "extra": [
+                [
+                  "duties",
+                  "ambiguous"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "HOLD-02",
+              "missed": [
+                [
+                  "employment",
+                  "contradiction"
+                ]
+              ],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "HOLD-03",
+              "missed": [],
+              "extra": [
+                [
+                  "duties",
+                  "ambiguous"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "HOLD-04",
+              "missed": [
+                [
+                  "location",
+                  "contradiction"
+                ]
+              ],
+              "extra": [
+                [
+                  "duties",
+                  "ambiguous"
+                ],
+                [
+                  "schedule",
+                  "contradiction"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "HOLD-05",
+              "missed": [
+                [
+                  "salary",
+                  "ambiguous"
+                ]
+              ],
+              "extra": [
+                [
+                  "duties",
+                  "ambiguous"
+                ],
+                [
+                  "requirements",
+                  "ambiguous"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "HOLD-06",
+              "missed": [
+                [
+                  "requirements",
+                  "ambiguous"
+                ]
+              ],
+              "extra": [
+                [
+                  "duties",
+                  "ambiguous"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "HOLD-07",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "HOLD-08",
+              "missed": [],
+              "extra": [
+                [
+                  "schedule",
+                  "contradiction"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "HOLD-09",
+              "missed": [],
+              "extra": [
+                [
+                  "duties",
+                  "ambiguous"
+                ],
+                [
+                  "schedule",
+                  "ambiguous"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "HOLD-10",
+              "missed": [],
+              "extra": [
+                [
+                  "duties",
+                  "ambiguous"
+                ],
+                [
+                  "requirements",
+                  "ambiguous"
+                ]
+              ],
+              "absent": false
+            }
+          ]
+        },
+        "both_raw": {
+          "vacancies": 10,
+          "must_total": 7,
+          "must_found": 7,
+          "found_total": 20,
+          "recall": 1.0,
+          "precision": 0.4,
+          "extra_total": 12,
+          "extra_per_10": 12.0,
+          "extra_on_clean": 5,
+          "rows": [
+            {
+              "id": "HOLD-01",
+              "missed": [],
+              "extra": [
+                [
+                  "duties",
+                  "ambiguous"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "HOLD-02",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "HOLD-03",
+              "missed": [],
+              "extra": [
+                [
+                  "duties",
+                  "ambiguous"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "HOLD-04",
+              "missed": [],
+              "extra": [
+                [
+                  "duties",
+                  "ambiguous"
+                ],
+                [
+                  "schedule",
+                  "contradiction"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "HOLD-05",
+              "missed": [],
+              "extra": [
+                [
+                  "duties",
+                  "ambiguous"
+                ],
+                [
+                  "requirements",
+                  "ambiguous"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "HOLD-06",
+              "missed": [],
+              "extra": [
+                [
+                  "duties",
+                  "ambiguous"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "HOLD-07",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "HOLD-08",
+              "missed": [],
+              "extra": [
+                [
+                  "schedule",
+                  "contradiction"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "HOLD-09",
+              "missed": [],
+              "extra": [
+                [
+                  "duties",
+                  "ambiguous"
+                ],
+                [
+                  "schedule",
+                  "ambiguous"
+                ]
+              ],
+              "absent": false
+            },
+            {
+              "id": "HOLD-10",
+              "missed": [],
+              "extra": [
+                [
+                  "duties",
+                  "ambiguous"
+                ],
+                [
+                  "requirements",
+                  "ambiguous"
+                ]
+              ],
+              "absent": false
+            }
+          ]
+        },
+        "both": {
+          "vacancies": 10,
+          "must_total": 7,
+          "must_found": 7,
+          "found_total": 7,
+          "recall": 1.0,
+          "precision": 1.0,
+          "extra_total": 0,
+          "extra_per_10": 0.0,
+          "extra_on_clean": 0,
+          "rows": [
+            {
+              "id": "HOLD-01",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "HOLD-02",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "HOLD-03",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "HOLD-04",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "HOLD-05",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "HOLD-06",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "HOLD-07",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "HOLD-08",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "HOLD-09",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            },
+            {
+              "id": "HOLD-10",
+              "missed": [],
+              "extra": [],
+              "absent": false
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
