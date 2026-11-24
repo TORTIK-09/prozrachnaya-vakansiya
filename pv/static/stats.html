@@ -93,7 +93,9 @@ function plural(n, a, b, c) { const m = Math.abs(n) % 100, k = m % 10; return m 
 const pairName = p => (TOPICS[p[0]] || p[0]) + " — " + (KINDS[p[1]] || p[1]);
 
 function setTable(st) {
-  const rows = MODES.filter(([k]) => st.modes[k]).map(([k, name, cls]) => {
+  // в наборе смысловых примеров Системный AI отдельной строкой не показывается: набор составлен из случаев вне его возможностей
+  const semantic = st.key === "extra";
+  const rows = MODES.filter(([k]) => st.modes[k] && !(semantic && k === "rules")).map(([k, name, cls]) => {
     const m = st.modes[k];
     return el("tr", {},
       el("td", {}, el("i", {class: cls, style: "display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:8px"}), name),
@@ -108,6 +110,7 @@ function setTable(st) {
   });
   return el("section", {class: "box"}, el("h3", {text: st.title + " · " + st.modes.rules.vacancies + " " + plural(st.modes.rules.vacancies, "вакансия", "вакансии", "вакансий")}),
     el("p", {class: "about", text: st.key === "sample" ? "Десять вакансий, выданных организаторами вместе с заданием. Четыре из них понятные: замечаний по ним быть не должно." : "Двенадцать вакансий, которые мы написали сами. Проблемы в них выражены смыслом, а не привычными словами: должность «водитель» с обязанностями бухгалтера, пятидневка в поле графика и скользящий график в тексте. Пять вакансий понятные."}),
+    semantic ? el("p", {class: "about", text: "Строки «Только Системный AI» здесь нет намеренно. Набор составлен из случаев, которые он по своему устройству не распознаёт: он сверяет поля и формулировки, а не смысл. На этих вакансиях он находит " + st.modes.rules.must_found + " из " + st.modes.rules.must_total + " обязательных замечаний и не даёт лишних — сравнивать его здесь с моделью значило бы мерить не то, для чего он сделан. Набор показывает другое: что добавляет ИИ там, где правил недостаточно."}) : null,
     el("div", {class: "scroll"}, el("table", {}, el("thead", {}, el("tr", {}, el("th", {text: "Способ"}), el("th", {text: "Найдено обязательных замечаний"}), el("th", {class: "n", title: "Доля найденных замечаний, которые есть в разметке", text: "Точность"}), el("th", {class: "n", text: "Лишних"}), el("th", {class: "n", title: "Лишние замечания по вакансиям, где замечаний быть не должно", text: "Лишних на понятных"}))), el("tbody", {}, rows))),
     agreement(st),
     el("details", {}, el("summary", {text: "Где именно расхождения"}), el("ul", {}, details)));
