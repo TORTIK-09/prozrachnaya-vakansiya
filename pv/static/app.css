@@ -217,3 +217,8 @@ mark.active { outline: 2px solid var(--accent); }
 .stat b { transform-origin: left center; }
 @media (max-width: 780px) { .runline { margin-left: 16px; margin-right: 16px; } }
 @media (prefers-reduced-motion: reduce) { .runline.show, .notice.show, .item.enter, .fade, .fade .finding, .stat b.bump { animation: none; } .track u, .runline .bar2 u, .meter .t u { transition: none; } }
+
+.item.pending .c { color: var(--accent); }
+.item.pending .marks { animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .item.pending .marks { animation: none; } }

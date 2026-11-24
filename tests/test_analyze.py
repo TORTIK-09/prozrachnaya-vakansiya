@@ -106,7 +106,7 @@ def test_location_rules():
 
 
 def test_employment_rules():
-    assert ("employment", "missing") in kinds(vac(employment=""))
+    assert ("employment", "missing") in kinds(vac(employment="", schedule=""))
     assert ("employment", "contradiction") in kinds(vac(duty="Ведение учёта. Частичная занятость, 0,5 ставки."))
     assert ("employment", "contradiction") in kinds(vac(employment="Частичная занятость", schedule="Полный рабочий день, 5/2, 09:00–18:00"))
 
@@ -234,3 +234,20 @@ def test_llm_slips_in_names_are_repaired_but_quotes_stay_verbatim():
     assert found[("duties", "ambiguous")].field == "duty"
     c = found[("schedule", "contradiction")]
     assert (c.field, c.conflict_with.field) == ("duty", "requirements") and validate(c, v) == []
+
+
+def test_portal_dictionary_schedules():
+    # «Полный рабочий день» — общепринятая пятидневка по восемь часов: не замечание, и занятость из него понятна
+    assert kinds(vac(schedule="Полный рабочий день", employment="")) == []
+    assert ("employment", "missing") in kinds(vac(schedule="", employment=""))
+    # гибкий режим: без дней и часов — вопрос; с «5/2» — нет; с жёсткими часами — противоречие
+    flex = "Режим гибкого рабочего времени"
+    assert ("schedule", "ambiguous") in kinds(vac(schedule=flex))
+    assert kinds(vac(schedule=flex, scheduleTypeComment="5/2")) == []
+    assert kinds(vac(schedule=flex, scheduleTypeComment="5 ти дневная рабочая неделя")) == []
+    assert ("schedule", "contradiction") in kinds(vac(schedule=flex, scheduleTypeComment="Строго с 09:00 до 18:00"))
+    assert ("schedule", "ambiguous") in kinds(vac(schedule="Сменная работа"))
+    assert kinds(vac(schedule="Сменная работа", shift=["Дневная смена 08:00-20:00"])) == []
+    part = "Неполный рабочий день/неполная рабочая неделя"
+    assert ("schedule", "ambiguous") in kinds(vac(schedule=part, employment="Частичная занятость"))
+    assert ("employment", "contradiction") in kinds(vac(schedule=part + ", 10:00–14:00"))

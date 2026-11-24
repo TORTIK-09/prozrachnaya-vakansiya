@@ -26,10 +26,14 @@ TIME_RANGE = re.compile(r"(?:с\s*)?\d{1,2}[:.]\d{2}\s*(?:[-–—]|до)\s*\d{1
 DAYS = re.compile(
     r"понедельник\w*|вторник\w*|сред[аыу]\b|четверг\w*|пятниц\w*|суббот\w*|воскресень\w*|"
     r"пятидневн\w+(?:\s+рабоч\w+\s+недел\w+)?|шестидневн\w+(?:\s+рабоч\w+\s+недел\w+)?|"
+    r"\b[56][\s-]*(?:ти|и)?[\s-]*дневн\w+(?:\s+рабоч\w+\s+недел\w+)?|"
     r"\b[1-7]\s*/\s*[1-7]\b|сутки\s+через\s+\w+|\bпн\b|\bпт\b", I)
-FLEXIBLE = re.compile(r"гибк\w+\s+график\w*|свободн\w+\s+график\w*|"
+# Портал отдаёт график значением из справочника: «Полный рабочий день», «Сменная работа»,
+# «Режим гибкого рабочего времени», «Неполный рабочий день/неполная рабочая неделя». Шаблоны покрывают и их.
+FLEXIBLE = re.compile(r"гибк\w+\s+график\w*|свободн\w+\s+график\w*|режим\w*\s+гибк\w+\s+рабоч\w+\s+времен\w+|"
+                      r"гибк\w+\s+рабоч\w+\s+времен\w+|"
                       r"график\w*\s+по\s+(?:согласовани\w+|договор[её]нност\w+)|гибк\w+\s+режим\w*", I)
-SHIFT = re.compile(r"сменн\w+\s+график\w*|сменн\w+\s+режим\w*|работа\s+по\s+сменам|посменн\w+", I)
+SHIFT = re.compile(r"сменн\w+\s+(?:график|режим|работ)\w*|работа\s+по\s+сменам|посменн\w+", I)
 SHIFT_SCHEME = re.compile(r"\b[1-7]\s*/\s*[1-7]\b|сутки\s+через\s+\w+|\d+\s*смен[аы]?\b", I)
 
 REMOTE = re.compile(r"(?:полностью\s+)?дистанционн\w+(?:\s+из\s+любого\s+города)?|удал[её]нн\w+\s+работ\w+|"
@@ -245,8 +249,12 @@ def _schedule(v: Vacancy) -> list[Finding]:
                         "Уточните у работодателя рабочие дни и время начала и окончания работы.")]
     flexible = search(FLEXIBLE, v.schedule)
     if flexible:
-        fixed = _first(v, SCHEDULE_FIELDS, DAYS, skip="schedule") or _first(v, SCHEDULE_FIELDS, TIME_RANGE, skip="schedule")
+        # гибкий график и «5/2» совместимы: дни известны, часы плавают. Противоречие — только жёсткие часы.
+        fixed = _first(v, SCHEDULE_FIELDS, TIME_RANGE, skip="schedule")
         if fixed:
+            days = _first(v, (fixed[0],), DAYS)
+            if days and days[1] in _sentence(v.text_of(fixed[0]), fixed[1]):
+                fixed = (fixed[0], _sentence(v.text_of(fixed[0]), fixed[1]).strip(" .;"))
             return [Finding("schedule", "contradiction", "schedule", flexible,
                             "В одном поле заявлен гибкий график, в другом — фиксированное расписание.",
                             "Уточните у работодателя, какой режим действует на самом деле: фиксированные дни и часы или гибкий график, и по каким правилам.",
@@ -263,9 +271,12 @@ def _schedule(v: Vacancy) -> list[Finding]:
                             "Указан сменный график без схемы чередования смен и времени их начала и окончания.",
                             "Уточните у работодателя схему смен (сколько рабочих и выходных дней подряд) и время начала и окончания смены.")]
         return []
+    if search(FULL_DAY, v.schedule) and not search(PART_TIME_TEXT, v.schedule):
+        # «Полный рабочий день» — общепринятое обозначение пятидневки с восьмичасовым днём: это не неоднозначность
+        return []
     if not has_time and not has_days and not v.schedule_comment and not v.shifts:
         return [Finding("schedule", "ambiguous", "schedule", v.schedule,
-                        "Указан только общий режим работы: рабочие дни и часы не названы ни в одном поле.",
+                        "По указанному режиму нельзя понять, в какие дни и сколько часов предстоит работать.",
                         "Уточните у работодателя рабочие дни недели и время начала и окончания работы.")]
     return []
 
@@ -303,6 +314,9 @@ def _location(v: Vacancy) -> list[Finding]:
 
 def _employment(v: Vacancy) -> list[Finding]:
     if not v.employment:
+        if v.schedule:
+            # график уже говорит о занятости: «полный рабочий день» — полная, «неполный рабочий день» — частичная
+            return []
         return [Finding("employment", "missing", "employment", "", "Тип занятости не указан.",
                         "Уточните у работодателя тип занятости: полная, частичная, временная или иная.")]
     emp = v.employment.lower()

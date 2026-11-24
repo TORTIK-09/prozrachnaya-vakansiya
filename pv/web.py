@@ -16,7 +16,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import calibrate, cli, config as config_mod, report, source
-from .analyze import profile
+from .analyze import profile, rules
 from .config import ROOT
 from .extra import resume as resume_mod
 
@@ -39,20 +39,31 @@ class Progress:
             if self.data.get("state") == "running":
                 return None
             self.entries = []
+            self.final: dict[int, dict] = {}
             self.data = {"job": self.data["job"] + 1, "state": "running", "kind": kind, "source": src,
-                         "phase": "Подготовка", "done": 0, "total": 0, "with_findings": 0, "findings": 0, "error": None}
+                         "phase": "Подготовка", "done": 0, "total": 0, "with_findings": 0, "findings": 0,
+                         "awaiting_model": False, "error": None}
             return self.data["job"]
 
     def phase(self, text: str) -> None:
         with self.lock:
             self.data["phase"] = text[:160]
 
-    def entry(self, index: int, entry: dict, total: int) -> None:
+    def entry(self, index: int, entry: dict, total: int, pending: bool = False) -> None:
+        """Готовая запись вакансии. pending — предварительная: правила уже отработали, ответа модели ещё нет."""
         with self.lock:
-            self.entries.append({**entry, "_i": index})
-            n = len(entry.get("findings") or [])
-            self.data.update(done=len(self.entries), total=total, phase="Разбор вакансий",
-                             with_findings=self.data["with_findings"] + int(n > 0), findings=self.data["findings"] + n)
+            self.entries.append({**entry, "_i": index, "pending": pending})
+            if pending:
+                self.data.update(total=total, awaiting_model=True, phase="Правила отработали, вакансии проверяет модель")
+                return
+            self.final[index] = entry
+            vals = self.final.values()
+            self.data.update(done=len(self.final), total=total, phase="Разбор вакансий",
+                             with_findings=sum(1 for e in vals if e.get("findings")),
+                             findings=sum(len(e.get("findings") or []) for e in vals))
+
+    def pending(self, index: int, entry: dict, total: int) -> None:
+        self.entry(index, entry, total, pending=True)
 
     def finish(self, rep: dict | None, error: str | None) -> None:
         with self.lock:
@@ -180,10 +191,16 @@ def create_app(cfg: config_mod.Config | None = None, auto_calibrate: bool = True
             raise HTTPException(404, "Такого отчёта ещё нет")
         return rep
 
+    def preview(raw: list) -> None:
+        """Мгновенный предварительный результат одних правил — пока модель думает, страница уже не пустая."""
+        report.analyze_all(raw, lambda v, m=None: rules.check(v), None, cfg.workers, None, "", cli.log, progress.pending)
+
     def work_check(raw: list, src: str):
         def fn(on_entry, on_log):
             analyzer, _ = cli.get_analyzer()
             model = llm()
+            if model is not None:
+                preview(raw)
             entries, stats = report.analyze_all(raw, analyzer, model, cfg.workers, None, "", cli.log, on_entry)
             rep = report.build(entries, stats, "file", src, model)
             report.write_json(cfg.reports / "check.json", rep)
@@ -192,7 +209,8 @@ def create_app(cfg: config_mod.Config | None = None, auto_calibrate: bool = True
 
     def work_run(run_cfg: config_mod.Config):
         def fn(on_entry, on_log):
-            code = cli.cmd_run(run_cfg, True, on_log=on_log, on_entry=on_entry)
+            code = cli.cmd_run(run_cfg, True, on_log=on_log, on_entry=on_entry,
+                               on_raw=preview if llm() is not None else None)
             rep = read_report("latest")
             if code == 0:
                 return rep, None

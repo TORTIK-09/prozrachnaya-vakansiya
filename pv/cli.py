@@ -71,7 +71,7 @@ def _summary(rep: dict, path: Path) -> None:
     log(f"отчёт: {path}")
 
 
-def cmd_run(cfg: config_mod.Config, use_llm: bool = True, on_log=None, on_entry=None) -> int:
+def cmd_run(cfg: config_mod.Config, use_llm: bool = True, on_log=None, on_entry=None, on_raw=None) -> int:
     """Рабочий режим: API → анализ → reports/latest.json. Этот же код запускает расписание."""
     log(f"источник: {cfg.source_url}, не больше {cfg.max_vacancies} вакансий")
     try:
@@ -87,6 +87,8 @@ def cmd_run(cfg: config_mod.Config, use_llm: bool = True, on_log=None, on_entry=
         path = report.save_error("Источник вернул пустой список вакансий", cfg.source_url, cfg.reports)
         log(f"ОШИБКА: источник вернул пустой список вакансий; прежний отчёт не тронут; сведения: {path}")
         return 2
+    if on_raw is not None:
+        on_raw(raw)
     analyze, version = get_analyzer()
     llm = make_llm(cfg, use_llm)
     cache = report.Cache(cfg.reports / "cache.json")

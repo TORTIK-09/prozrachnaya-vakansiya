@@ -119,3 +119,29 @@ def test_pages_ship_live_scripts(slow):
     c, _, _ = slow
     assert "live.js" in c.get("/").text and "startJob" in c.get("/static/live.js").text
     assert c.get("/static/live.js").headers["cache-control"] == "no-cache"
+
+
+def test_rules_preview_comes_first_when_model_is_slow(tmp_path, monkeypatch):
+    """С моделью страница сразу получает замечания правил, а потом — уточнённые записи."""
+    gate = threading.Semaphore(0)
+
+    class Slow:
+        def describe(self):
+            return {"provider": "test", "model": "slow"}
+
+        def complete(self, system, user):
+            gate.acquire(timeout=5)
+            return '{"findings": []}'
+
+    monkeypatch.setattr(cli, "make_llm", lambda c, enabled: Slow())
+    monkeypatch.setattr(cli, "log", lambda m: None)
+    cfg = config.Config(reports_dir=str(tmp_path / "reports"), workers=1)
+    c = TestClient(web.create_app(cfg, auto_calibrate=False), base_url="http://127.0.0.1:8085")
+    c.post("/api/check?background=1", content=json.dumps(RAW[:3]), headers={"content-type": "application/json"})
+    p = wait(c, lambda p: len(p["entries"]) == 3)
+    assert p["done"] == 0 and p["awaiting_model"] is True and all(e["pending"] for e in p["entries"])
+    assert p["entries"][0]["findings"][0]["source"] == "rule"
+    for _ in range(3):
+        gate.release()
+    p = wait(c, lambda p: p["state"] == "done")
+    assert p["done"] == 3 and p["with_findings"] == 3

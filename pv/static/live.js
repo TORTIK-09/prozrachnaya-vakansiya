@@ -3,7 +3,7 @@
 // записи и дорисовывает их: числа плавно доходят до новых значений, полосы растут, строки списка появляются.
 // Если проверку запустили в другой вкладке или по расписанию — страница подхватит её сама.
 
-const LIVE = {job: 0, following: false, since: 0, seen: new Set()};
+const LIVE = {job: 0, following: false, final: false, since: 0, seen: new Set()};
 const reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 // Число плавно меняется от прежнего значения к новому.
@@ -31,8 +31,8 @@ function runLine(p) {
   if (!p || p.state !== "running") { box.classList.remove("show"); return; }
   box.classList.add("show");
   const where = p.kind === "latest" ? "Вакансии с портала" : "Проверочный набор";
-  document.getElementById("runText").textContent = where + ": " + (p.total ? "разобрано " + p.done + " из " + p.total : p.phase || "подготовка");
-  document.getElementById("runSub").textContent = p.total ? "с замечаниями — " + p.with_findings + ", замечаний — " + p.findings : (p.source || "");
+  document.getElementById("runText").textContent = where + ": " + (p.total ? (p.awaiting_model ? "модель проверила " : "разобрано ") + p.done + " из " + p.total : p.phase || "подготовка");
+  document.getElementById("runSub").textContent = p.total ? (p.awaiting_model ? "Правила уже отработали — их замечания на экране. Модель дополняет их по мере ответа." : "с замечаниями — " + p.with_findings + ", замечаний — " + p.findings) : (p.source || "");
   document.getElementById("runBar").style.width = (p.total ? Math.max(2, Math.round(p.done / p.total * 100)) : 2) + "%";
 }
 
@@ -63,12 +63,17 @@ async function followJob(first) {
       const fresh = p.entries || [];
       if (fresh.length && S.report && S.report.partial) {
         LIVE.since += fresh.length;
-        S.report.vacancies.push(...fresh);
+        let selChanged = false;
+        for (const e of fresh) {                      // запись с тем же номером — уточнение: модель ответила
+          const k = S.report.vacancies.findIndex(v => v._i === e._i);
+          if (k >= 0) { S.report.vacancies[k] = e; if (e.id === S.sel) selChanged = true; if (!e.pending) LIVE.seen.delete(e.id); }
+          else S.report.vacancies.push(e);
+        }
         S.report.vacancies.sort((a, b) => a._i - b._i);
         const hadSel = !!S.sel;
-        if (!S.sel) S.sel = (S.report.vacancies.find(v => (v.findings || []).length) || {}).id || null;
+        if (!S.sel) S.sel = (S.report.vacancies.find(v => (v.findings || []).length) || S.report.vacancies[0] || {}).id || null;
         renderSummary(); renderList();
-        if (!hadSel && S.sel) renderDetail();
+        if ((!hadSel && S.sel) || selChanged) renderDetail();
       }
       if (p.state !== "running") break;
       p = null;
@@ -76,12 +81,13 @@ async function followJob(first) {
     }
     runLine(null);
     if (p.state === "failed") banner((p.error || "Проверка не удалась") + (p.kind === "latest" ? ". Показан последний успешный отчёт." : ""));
+    LIVE.final = true;
     try { const rep = await api("/api/report?kind=" + S.kind); const keep = S.sel; setReport(rep); if (keep && rep.vacancies.some(v => v.id === keep) && keep !== S.sel) { S.sel = keep; renderList(); renderDetail(); } }
     catch { if (S.report && S.report.partial) { S.report = null; S.sel = null; render(); } }
   } catch (e) {
     runLine(null); banner("Связь с сервисом потеряна: " + e.message);
   } finally {
-    LIVE.following = false; liveButtons(false);
+    LIVE.following = false; LIVE.final = false; liveButtons(false);
   }
 }
 

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Прозрачная вакансия</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23173a3a'/%3E%3Ccircle cx='14' cy='14' r='6.5' fill='none' stroke='%23f2b441' stroke-width='2.6'/%3E%3Cpath d='m19 19 6 6' stroke='%23f4efe4' stroke-width='2.8' stroke-linecap='round'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="/static/app.css?v=4">
+<link rel="stylesheet" href="/static/app.css?v=5">
 </head>
 <body>
 <header class="top">
@@ -59,7 +59,7 @@
 </main>
 
 <script src="/static/calib.js?v=3"></script>
-<script src="/static/live.js?v=3"></script>
+<script src="/static/live.js?v=4"></script>
 <script>
 "use strict";
 const TOPICS = {title: "Название должности", duties: "Обязанности", requirements: "Требования", salary: "Оплата", schedule: "График", location: "Место работы", employment: "Тип занятости"};
@@ -112,6 +112,7 @@ function visible() {
 }
 
 function setReport(rep) {
+  if (LIVE.following && !LIVE.final) return;
   if (!S.report || S.report.partial !== true) LIVE.seen = new Set();     // новый отчёт — список появляется заново
   S.report = rep;
   const vs = rep.vacancies || [];
@@ -160,10 +161,10 @@ function renderList() {
   $("list").replaceChildren(...vs.map(v => {
     const c = counts(v), n = (v.findings || []).length;
     const fresh = !LIVE.seen.has(v.id); LIVE.seen.add(v.id);
-    return el("button", {class: "item" + (fresh ? " enter" : ""), "aria-current": String(v.id === S.sel), onclick: () => { S.sel = v.id; S.tab = S.tab === "resume" ? "resume" : "audit"; renderList(); renderDetail(); }},
+    return el("button", {class: "item" + (fresh ? " enter" : "") + (v.pending ? " pending" : ""), "aria-current": String(v.id === S.sel), onclick: () => { S.sel = v.id; S.tab = S.tab === "resume" ? "resume" : "audit"; renderList(); renderDetail(); }},
       el("span", {class: "t", text: v.title || "(без названия)"}),
       el("span", {class: "marks"}, n === 0 ? el("span", {class: "count clean", text: "понятна"}) : Object.keys(KINDS).filter(k => c[k]).map(k => el("span", {class: "count " + k, title: KINDS[k], text: String(c[k])}))),
-      el("span", {class: "c", text: [v.company, v.id].filter(Boolean).join(" · ")}));
+      el("span", {class: "c", text: [v.company, v.id].filter(Boolean).join(" · ") + (v.pending ? " · проверяет модель" : "")}));
   }));
 }
 
