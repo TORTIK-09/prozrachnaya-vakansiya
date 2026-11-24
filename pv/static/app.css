@@ -185,10 +185,35 @@ mark.active { outline: 2px solid var(--accent); }
 .notice .body { flex: 1; min-width: 0; }
 .notice b { display: block; }
 .notice .sub { font-size: 13px; color: var(--ink-2); }
-.notice .bar2 { height: 6px; border-radius: 3px; background: rgba(0,0,0,.12); overflow: hidden; margin-top: 7px; max-width: 420px; }
+.notice .bar2 { height: 6px; border-radius: 3px; background: rgba(0,0,0,.12); overflow: hidden; margin-top: 7px; }
 .notice .bar2 u { display: block; height: 100%; background: var(--amb); transition: width .4s; }
 .notice .spin { display: inline-block; color: var(--amb); flex: none; }
 .notice.done .spin, .notice.failed .spin, .notice.done .bar2, .notice.failed .bar2 { display: none; }
 @media (max-width: 780px) { .notice { margin-left: 16px; margin-right: 16px; } }
 
 [hidden] { display: none !important; }
+
+/* живое обновление: ход проверки и анимации */
+.runline { margin: 14px 24px 0; padding: 11px 14px; border-radius: var(--r); border: 1px solid var(--line); background: var(--surface); box-shadow: var(--shadow); display: none; gap: 12px; align-items: center; }
+.runline.show { display: flex; animation: drop .3s ease both; }
+.runline .spin { display: inline-block; color: var(--accent); flex: none; }
+.runline .body { flex: 1; min-width: 0; }
+.runline b { display: block; font-variant-numeric: tabular-nums; }
+.runline .sub { font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.runline .bar2 { height: 6px; border-radius: 3px; background: var(--sunken); overflow: hidden; margin-top: 7px; }
+.runline .bar2 u { display: block; height: 100%; background: var(--accent); transition: width .6s cubic-bezier(.2,.7,.2,1); }
+.notice.show { animation: drop .3s ease both; }
+.track u { transition: width .6s cubic-bezier(.2,.7,.2,1); }
+.item.enter { animation: enter .4s ease both; }
+.fade { animation: fade .3s ease both; }
+.fade .finding { animation: enter .35s ease both; }
+.fade .finding:nth-child(3) { animation-delay: .05s; } .fade .finding:nth-child(4) { animation-delay: .1s; } .fade .finding:nth-child(5) { animation-delay: .15s; } .fade .finding:nth-child(n+6) { animation-delay: .2s; }
+.stat b.bump { animation: bump .45s ease; }
+.chip span { transition: opacity .3s; }
+@keyframes drop { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+@keyframes enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes bump { 40% { transform: scale(1.08); } }
+.stat b { transform-origin: left center; }
+@media (max-width: 780px) { .runline { margin-left: 16px; margin-right: 16px; } }
+@media (prefers-reduced-motion: reduce) { .runline.show, .notice.show, .item.enter, .fade, .fade .finding, .stat b.bump { animation: none; } .track u, .runline .bar2 u, .meter .t u { transition: none; } }

@@ -99,9 +99,30 @@ def _locate(quote: str, source: str) -> str:
     return m.group(0) if m else ""
 
 
+# Небольшие модели путают названия тем с именами полей. Это описка, а не выдумка: исправляем.
+TOPIC_ALIASES = {"duty": "duties", "requirement": "requirements", "job-name": "title", "job_name": "title",
+                 "address": "location", "addresses": "location", "workplace": "location"}
+
+
+def _place(quote: str, field: str, v: Vacancy) -> tuple[str, str]:
+    """Где на самом деле стоит цитата: (поле, дословный фрагмент). Модель нередко называет не то поле,
+    хотя сама цитата верная — тогда берём поле, в котором она нашлась."""
+    hit = _locate(quote, v.text_of(field)) if field in SOURCE_FIELDS else ""
+    if hit:
+        return field, hit
+    for f in SOURCE_FIELDS:
+        hit = _locate(quote, v.text_of(f))
+        if hit and len(hit) >= 8:        # короткий фрагмент может случайно найтись где угодно
+            return f, hit
+    return field, ""
+
+
 def _to_finding(d: dict, v: Vacancy) -> Finding | None:
     topic, kind, field = str(d.get("topic", "")).strip(), str(d.get("kind", "")).strip(), str(d.get("field", "")).strip()
-    if topic not in TOPICS or kind not in KINDS or field not in SOURCE_FIELDS:
+    topic = TOPIC_ALIASES.get(topic, topic)
+    if topic not in TOPICS or kind not in KINDS:
+        return None
+    if kind == "missing" and field not in SOURCE_FIELDS:
         return None
     problem, rec = str(d.get("problem", "")).strip(), str(d.get("recommendation", "")).strip()
     if not problem or not rec:
@@ -112,15 +133,12 @@ def _to_finding(d: dict, v: Vacancy) -> Finding | None:
             return None
         f = Finding(topic, kind, field, "", problem[:500], rec[:500], source="llm")
         return None if validate(f, v) else f
-    quote = _locate(str(d.get("quote", "")), v.text_of(field))
+    field, quote = _place(str(d.get("quote", "")), field, v)
     if not quote:
         return None
     conflict = None
     if kind == "contradiction":
-        cf = str(d.get("conflict_field", "")).strip()
-        if cf not in SOURCE_FIELDS:
-            return None
-        cq = _locate(str(d.get("conflict_quote", "")), v.text_of(cf))
+        cf, cq = _place(str(d.get("conflict_quote", "")), str(d.get("conflict_field", "")).strip(), v)
         if not cq or (cf == field and cq == quote):
             return None
         conflict = Evidence(cf, cq)

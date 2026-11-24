@@ -11,10 +11,8 @@ from __future__ import annotations
 
 from ..models import TOPICS, Finding, LLM, Vacancy
 from . import ai, profile, rules
+from .version import VERSION  # noqa: F401
 
-# Версия входит в отпечаток кэша: после изменения правил или запроса к модели увеличьте её,
-# иначе рабочий режим отдаст старые результаты из кэша.
-VERSION = "2"
 MODES = ("rules", "llm", "both")
 
 

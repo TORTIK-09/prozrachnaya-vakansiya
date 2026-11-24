@@ -221,3 +221,16 @@ def test_llm_client_request_and_fallbacks():
 
 def test_ai_parse_tolerates_wrapping_text():
     assert ai._parse('Вот ответ: {"findings": [{"topic": "duties"}]} спасибо') == [{"topic": "duties"}]
+
+
+def test_llm_slips_in_names_are_repaired_but_quotes_stay_verbatim():
+    # модель назвала тему именем поля и перепутала поле второй цитаты — цитаты при этом настоящие
+    v = vac(duty="Работа в две смены. Ночных смен нет.", requirements="Знание учёта. Готовность к ночным сменам.")
+    m = FakeLLM(llm_answer(
+        {"topic": "duty", "kind": "ambiguous", "field": "requirements", "quote": "Работа в две смены", "problem": "п", "recommendation": "р"},
+        {"topic": "schedule", "kind": "contradiction", "field": "schedule", "quote": "Ночных смен нет", "problem": "п",
+         "recommendation": "р", "conflict_field": "нет такого поля", "conflict_quote": "Готовность к ночным сменам"}))
+    found = {(f.topic, f.kind): f for f in analyze(v, m) if f.source == "llm"}
+    assert found[("duties", "ambiguous")].field == "duty"
+    c = found[("schedule", "contradiction")]
+    assert (c.field, c.conflict_with.field) == ("duty", "requirements") and validate(c, v) == []

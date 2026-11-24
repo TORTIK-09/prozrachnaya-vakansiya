@@ -14,7 +14,7 @@ DEFAULT_MODEL = "qwen2.5:3b"
 
 
 class ChatLLM:
-    def __init__(self, base_url: str, model: str, api_key: str = "", timeout: float = 120.0,
+    def __init__(self, base_url: str, model: str, api_key: str = "", timeout: float = 300.0,
                  client: httpx.Client | None = None):
         self.base_url = base_url.rstrip("/")
         self.model = model

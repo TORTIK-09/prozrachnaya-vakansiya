@@ -11,6 +11,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -25,12 +26,50 @@ MAX_UPLOAD = 20 * 1024 * 1024
 LOCAL_HOSTS = {"127.0.0.1", "localhost", "[::1]"}
 
 
+class Progress:
+    """Ход текущей проверки для показа в панели в реальном времени."""
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.data: dict = {"job": 0, "state": "idle"}
+        self.entries: list[dict] = []
+
+    def begin(self, kind: str, src: str) -> int | None:
+        with self.lock:
+            if self.data.get("state") == "running":
+                return None
+            self.entries = []
+            self.data = {"job": self.data["job"] + 1, "state": "running", "kind": kind, "source": src,
+                         "phase": "Подготовка", "done": 0, "total": 0, "with_findings": 0, "findings": 0, "error": None}
+            return self.data["job"]
+
+    def phase(self, text: str) -> None:
+        with self.lock:
+            self.data["phase"] = text[:160]
+
+    def entry(self, index: int, entry: dict, total: int) -> None:
+        with self.lock:
+            self.entries.append({**entry, "_i": index})
+            n = len(entry.get("findings") or [])
+            self.data.update(done=len(self.entries), total=total, phase="Разбор вакансий",
+                             with_findings=self.data["with_findings"] + int(n > 0), findings=self.data["findings"] + n)
+
+    def finish(self, rep: dict | None, error: str | None) -> None:
+        with self.lock:
+            self.data.update(state="failed" if error else "done", error=error, phase="Готово" if not error else "Сбой")
+
+    def snapshot(self, since: int) -> dict:
+        with self.lock:
+            return {**self.data, "entries": self.entries[since:] if self.data.get("state") == "running" else []}
+
+
 def create_app(cfg: config_mod.Config | None = None, auto_calibrate: bool = True) -> FastAPI:
     cfg = cfg or config_mod.load()
     app = FastAPI(title="Прозрачная вакансия", docs_url=None, redoc_url=None, openapi_url=None)
     lock = threading.Lock()                 # проверки идут по одной: модель и кэш общие
     state: dict = {"llm": None, "llm_ready": False}
     job = calibrate.Job(cfg.reports)
+    progress = Progress()
 
     def llm():
         if not state["llm_ready"]:
@@ -77,12 +116,6 @@ def create_app(cfg: config_mod.Config | None = None, auto_calibrate: bool = True
             "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; "
             "img-src 'self' data:; frame-ancestors 'none'")
         return response
-
-    def analyze(raw: list, mode: str, src: str) -> dict:
-        analyzer, version = cli.get_analyzer()
-        model = llm()
-        entries, stats = report.analyze_all(raw, analyzer, model, cfg.workers, None, "", cli.log)
-        return report.build(entries, stats, mode, src, model)
 
     def read_report(kind: str) -> dict | None:
         path = cfg.reports / ("latest.json" if kind == "latest" else "check.json")
@@ -147,15 +180,64 @@ def create_app(cfg: config_mod.Config | None = None, auto_calibrate: bool = True
             raise HTTPException(404, "Такого отчёта ещё нет")
         return rep
 
-    @app.post("/api/check-sample")
-    def check_sample():
-        with lock:
-            rep = analyze(source.load_file(SAMPLE), "file", SAMPLE.name)
+    def work_check(raw: list, src: str):
+        def fn(on_entry, on_log):
+            analyzer, _ = cli.get_analyzer()
+            model = llm()
+            entries, stats = report.analyze_all(raw, analyzer, model, cfg.workers, None, "", cli.log, on_entry)
+            rep = report.build(entries, stats, "file", src, model)
             report.write_json(cfg.reports / "check.json", rep)
+            return rep, None
+        return fn
+
+    def work_run(run_cfg: config_mod.Config):
+        def fn(on_entry, on_log):
+            code = cli.cmd_run(run_cfg, True, on_log=on_log, on_entry=on_entry)
+            rep = read_report("latest")
+            if code == 0:
+                return rep, None
+            err = {}
+            try:
+                err = json.loads((cfg.reports / "last_error.json").read_text(encoding="utf-8"))
+            except (ValueError, OSError):
+                pass
+            return rep, err.get("error", "Источник недоступен")
+        return fn
+
+    def launch(kind: str, src: str, fn, background: bool):
+        """Запуск проверки. В фоне — сразу отвечаем, а страница следит за ходом через /api/progress."""
+        job_id = progress.begin(kind, src)
+        if job_id is None:
+            raise HTTPException(409, "Проверка уже идёт — дождитесь её окончания")
+
+        def run() -> tuple[dict | None, str | None]:
+            try:
+                with lock:
+                    rep, error = fn(progress.entry, progress.phase)
+            except Exception as e:
+                rep, error = None, f"{type(e).__name__}: {e}"[:300]
+            progress.finish(rep, error)
+            return rep, error
+
+        if background:
+            threading.Thread(target=run, name="check", daemon=True).start()
+            return JSONResponse(progress.snapshot(0), status_code=202)
+        rep, error = run()
+        if error:
+            return JSONResponse({"detail": error, "report": rep}, status_code=502)
         return rep
 
+    @app.get("/api/progress")
+    def get_progress(since: int = 0):
+        """Ход текущей проверки: сколько сделано и записи вакансий, готовые после номера `since`."""
+        return progress.snapshot(max(0, since))
+
+    @app.post("/api/check-sample")
+    def check_sample(background: bool = False):
+        return launch("check", SAMPLE.name, work_check(source.load_file(SAMPLE), SAMPLE.name), background)
+
     @app.post("/api/check")
-    async def check_upload(request: Request, name: str = "загруженный файл"):
+    async def check_upload(request: Request, name: str = "загруженный файл", background: bool = False):
         body = await request.body()
         if len(body) > MAX_UPLOAD:
             raise HTTPException(413, "Файл больше 20 МБ")
@@ -167,30 +249,20 @@ def create_app(cfg: config_mod.Config | None = None, auto_calibrate: bool = True
             raise HTTPException(422, str(e))
         if not raw:
             raise HTTPException(422, "В файле не найдено ни одной вакансии")
-        with lock:
-            rep = analyze(raw, "file", name[:120])
-            report.write_json(cfg.reports / "check.json", rep)
-        return rep
+        if background:
+            return launch("check", name[:120], work_check(raw, name[:120]), True)
+        # разбор может идти долго: не держим им цикл обработки запросов
+        return await run_in_threadpool(launch, "check", name[:120], work_check(raw, name[:120]), False)
 
     @app.post("/api/run")
-    def run_live(max_vacancies: int | None = None):
+    def run_live(max_vacancies: int | None = None, background: bool = False):
         """Ручной запуск рабочего режима — тот же код, что по расписанию."""
         run_cfg = cfg
         if max_vacancies is not None:
             if not 1 <= max_vacancies <= 5000:
                 raise HTTPException(422, "Число вакансий: от 1 до 5000")
             run_cfg = replace(cfg, max_vacancies=max_vacancies)
-        with lock:
-            code = cli.cmd_run(run_cfg, True)
-        rep = read_report("latest")
-        if code != 0:
-            err = {}
-            try:
-                err = json.loads((cfg.reports / "last_error.json").read_text(encoding="utf-8"))
-            except (ValueError, OSError):
-                pass
-            return JSONResponse({"detail": err.get("error", "Источник недоступен"), "report": rep}, status_code=502)
-        return rep
+        return launch("latest", cfg.source_url, work_run(run_cfg), background)
 
     @app.get("/api/resumes")
     def resumes():

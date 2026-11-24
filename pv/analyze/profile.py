@@ -14,6 +14,7 @@ import re
 from pathlib import Path
 
 from ..config import ROOT
+from .version import VERSION
 
 SHIPPED = Path(__file__).resolve().parent.parent / "profiles"
 _cache: dict[tuple[str, str], dict | None] = {}
@@ -39,7 +40,8 @@ def load(info: dict, reports_dir: Path | None = None) -> dict | None:
                 data = json.loads(p.read_text(encoding="utf-8"))
             except (ValueError, OSError):
                 continue
-            if isinstance(data, dict):
+            # профиль от прежней версии анализатора не годится: запрос к модели с тех пор менялся
+            if isinstance(data, dict) and data.get("version") == VERSION:
                 data["_shipped"] = folder == SHIPPED
                 return data
     return None

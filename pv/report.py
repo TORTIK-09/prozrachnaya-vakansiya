@@ -76,8 +76,13 @@ def _dedup(findings: list[Finding]) -> list[Finding]:
 
 def analyze_all(raw_items: list[Any], analyze: Analyze, llm: LLM | None, workers: int = 4,
                 cache: Cache | None = None, salt: str = "",
-                log: Callable[[str], None] = lambda s: None) -> tuple[list[dict], dict]:
-    """Возвращает записи отчёта (по одной на ID, в порядке входных данных) и статистику."""
+                log: Callable[[str], None] = lambda s: None,
+                on_entry: Callable[[int, dict, int], None] | None = None) -> tuple[list[dict], dict]:
+    """Возвращает записи отчёта (по одной на ID, в порядке входных данных) и статистику.
+
+    `on_entry(номер, запись, всего)` вызывается сразу, как готова очередная вакансия, — из рабочего потока,
+    не по порядку. По нему панель показывает ход проверки.
+    """
     stats = {"input": len(raw_items), "vacancies": 0, "with_findings": 0, "findings": 0, "skipped_no_id": 0,
              "duplicates": 0, "from_cache": 0, "rejected_findings": 0, "analyzer_errors": 0}
     vacancies: list[Vacancy] = []
@@ -111,17 +116,29 @@ def analyze_all(raw_items: list[Any], analyze: Analyze, llm: LLM | None, workers
             cache.put(v.id, fp, good)
         return good, None, False, len(found) - len(good)
 
-    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
-        results = list(pool.map(one, vacancies))
-
-    entries = []
-    for v, (found, error, cached, rejected) in zip(vacancies, results):
+    def work(item: tuple[int, Vacancy]) -> tuple[dict, tuple]:
+        i, v = item
+        res = one(v)
+        found, error = res[0], res[1]
         entry: dict[str, Any] = {"id": v.id, "url": v.url, "title": v.title, "company": v.company,
                                  "findings": [f.to_json() for f in found],
                                  # значения полей источника: по ним редактор видит цитаты в контексте
                                  "fields": {f: v.text_of(f) for f in SOURCE_FIELDS if v.text_of(f)}}
         if error:
             entry["error"] = error
+        if on_entry is not None:
+            try:
+                on_entry(i, entry, len(vacancies))
+            except Exception:
+                pass            # показ хода не должен ломать сам разбор
+        return entry, res
+
+    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+        results = list(pool.map(work, enumerate(vacancies)))
+
+    entries = []
+    for entry, (found, error, cached, rejected) in results:
+        if error:
             stats["analyzer_errors"] += 1
         stats["from_cache"] += int(cached)
         stats["rejected_findings"] += rejected

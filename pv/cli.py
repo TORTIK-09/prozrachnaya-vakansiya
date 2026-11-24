@@ -71,11 +71,11 @@ def _summary(rep: dict, path: Path) -> None:
     log(f"отчёт: {path}")
 
 
-def cmd_run(cfg: config_mod.Config, use_llm: bool = True) -> int:
+def cmd_run(cfg: config_mod.Config, use_llm: bool = True, on_log=None, on_entry=None) -> int:
     """Рабочий режим: API → анализ → reports/latest.json. Этот же код запускает расписание."""
     log(f"источник: {cfg.source_url}, не больше {cfg.max_vacancies} вакансий")
     try:
-        raw = source.fetch_api(cfg, log=log)
+        raw = source.fetch_api(cfg, log=(lambda m: (log(m), on_log(m))) if on_log else log)
     except source.SourceError as e:
         path = report.save_error(str(e), cfg.source_url, cfg.reports)
         latest = cfg.reports / "latest.json"
@@ -90,7 +90,7 @@ def cmd_run(cfg: config_mod.Config, use_llm: bool = True) -> int:
     analyze, version = get_analyzer()
     llm = make_llm(cfg, use_llm)
     cache = report.Cache(cfg.reports / "cache.json")
-    entries, stats = report.analyze_all(raw, analyze, llm, cfg.workers, cache, _salt(version, llm), log)
+    entries, stats = report.analyze_all(raw, analyze, llm, cfg.workers, cache, _salt(version, llm), log, on_entry)
     rep = report.build(entries, stats, "api", cfg.source_url, llm)
     _summary(rep, report.save_latest(rep, cfg.reports))
     return 0

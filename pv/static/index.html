@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Прозрачная вакансия</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23173a3a'/%3E%3Ccircle cx='14' cy='14' r='6.5' fill='none' stroke='%23f2b441' stroke-width='2.6'/%3E%3Cpath d='m19 19 6 6' stroke='%23f4efe4' stroke-width='2.8' stroke-linecap='round'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="/static/app.css?v=2">
+<link rel="stylesheet" href="/static/app.css?v=4">
 </head>
 <body>
 <header class="top">
@@ -36,6 +36,7 @@
   <a class="btn" id="jsonLink" href="/api/report?kind=check" target="_blank" rel="noopener">JSON отчёта</a>
 </div>
 <div class="banner" id="banner" role="status"></div>
+<div class="runline" id="runline" role="status"><span class="spin"></span><div class="body"><b id="runText"></b><span class="sub" id="runSub"></span><div class="bar2"><u id="runBar" style="width:0"></u></div></div></div>
 <div class="notice" id="calib" role="status"><span class="spin"></span><div class="body"><b id="calibTitle"></b><span class="sub" id="calibSub"></span><div class="bar2"><u id="calibBar" style="width:0"></u></div></div><a class="btn" href="/stats" id="calibLink" hidden>Что показала настройка</a><button class="btn" id="calibClose" hidden>Закрыть</button></div>
 
 <section class="summary" aria-label="Сводка по отчёту">
@@ -57,7 +58,8 @@
   <section class="pane detail" id="detail"><div class="empty">Выберите вакансию слева</div></section>
 </main>
 
-<script src="/static/calib.js?v=2"></script>
+<script src="/static/calib.js?v=3"></script>
+<script src="/static/live.js?v=3"></script>
 <script>
 "use strict";
 const TOPICS = {title: "Название должности", duties: "Обязанности", requirements: "Требования", salary: "Оплата", schedule: "График", location: "Место работы", employment: "Тип занятости"};
@@ -110,6 +112,7 @@ function visible() {
 }
 
 function setReport(rep) {
+  if (!S.report || S.report.partial !== true) LIVE.seen = new Set();     // новый отчёт — список появляется заново
   S.report = rep;
   const vs = rep.vacancies || [];
   if (!vs.some(v => v.id === S.sel)) S.sel = (vs.find(v => (v.findings || []).length) || vs[0] || {}).id || null;
@@ -121,19 +124,29 @@ function renderSummary() {
   const vs = S.report ? S.report.vacancies : [];
   const bad = vs.filter(v => (v.findings || []).length).length;
   const total = vs.reduce((n, v) => n + (v.findings || []).length, 0);
-  $("sTotal").textContent = S.report ? vs.length : "—";
-  $("sClean").textContent = S.report ? vs.length - bad : "—";
-  $("sBad").textContent = S.report ? bad : "—";
-  $("sFind").textContent = S.report ? total : "—";
+  setNum("sTotal", S.report ? vs.length : null);
+  setNum("sClean", S.report ? vs.length - bad : null);
+  setNum("sBad", S.report ? bad : null);
+  setNum("sFind", S.report ? total : null);
   const by = {}; let max = 1;
   for (const t in TOPICS) by[t] = {contradiction: 0, ambiguous: 0, missing: 0, n: 0};
   for (const v of vs) for (const f of v.findings || []) if (by[f.topic]) { by[f.topic][f.kind]++; by[f.topic].n++; }
   for (const t in by) max = Math.max(max, by[t].n);
-  $("topics").replaceChildren(...Object.keys(TOPICS).map(t => el("button", {class: "topic-row", "aria-pressed": String(S.fTopic === t), title: "Показать вакансии с замечаниями по этой теме",
-    onclick: () => { S.fTopic = S.fTopic === t ? null : t; render(); }},
-    el("span", {text: TOPICS[t]}),
-    el("span", {class: "track"}, ...Object.keys(KINDS).map(k => el("u", {class: "k-" + k, style: "width:" + (by[t][k] / max * 100) + "%"}))),
-    el("span", {class: "num", text: String(by[t].n)}))));
+  const box = $("topics");
+  if (box.children.length !== Object.keys(TOPICS).length) {
+    box.replaceChildren(...Object.keys(TOPICS).map(t => el("button", {class: "topic-row", "data-t": t, title: "Показать вакансии с замечаниями по этой теме",
+      onclick: () => { S.fTopic = S.fTopic === t ? null : t; render(); }},
+      el("span", {text: TOPICS[t]}),
+      el("span", {class: "track"}, ...Object.keys(KINDS).map(k => el("u", {class: "k-" + k, style: "width:0"}))),
+      el("span", {class: "num", id: "tn-" + t, text: "0"}))));
+    void box.offsetWidth;
+  }
+  for (const row of box.children) {
+    const t = row.dataset.t;
+    row.setAttribute("aria-pressed", String(S.fTopic === t));
+    Object.keys(KINDS).forEach((k, i) => { row.children[1].children[i].style.width = (by[t][k] / max * 100) + "%"; });
+    setNum("tn-" + t, by[t].n);
+  }
 }
 function renderFilters() {
   const opts = [[null, "все"], ["contradiction", "противоречия"], ["ambiguous", "неоднозначности"], ["missing", "пропуски"], ["clean", "понятные"]];
@@ -146,7 +159,8 @@ function renderList() {
   if (!vs.length) return $("list").replaceChildren(el("div", {class: "empty", text: "Под эти условия вакансий нет"}));
   $("list").replaceChildren(...vs.map(v => {
     const c = counts(v), n = (v.findings || []).length;
-    return el("button", {class: "item", "aria-current": String(v.id === S.sel), onclick: () => { S.sel = v.id; S.tab = S.tab === "resume" ? "resume" : "audit"; renderList(); renderDetail(); }},
+    const fresh = !LIVE.seen.has(v.id); LIVE.seen.add(v.id);
+    return el("button", {class: "item" + (fresh ? " enter" : ""), "aria-current": String(v.id === S.sel), onclick: () => { S.sel = v.id; S.tab = S.tab === "resume" ? "resume" : "audit"; renderList(); renderDetail(); }},
       el("span", {class: "t", text: v.title || "(без названия)"}),
       el("span", {class: "marks"}, n === 0 ? el("span", {class: "count clean", text: "понятна"}) : Object.keys(KINDS).filter(k => c[k]).map(k => el("span", {class: "count " + k, title: KINDS[k], text: String(c[k])}))),
       el("span", {class: "c", text: [v.company, v.id].filter(Boolean).join(" · ")}));
@@ -187,7 +201,10 @@ function renderDetail() {
   const tabs = el("div", {class: "tabs", role: "tablist"},
     el("button", {role: "tab", "aria-selected": String(S.tab === "audit"), onclick: () => { S.tab = "audit"; renderDetail(); }, text: "Разбор вакансии"}),
     el("button", {role: "tab", "aria-selected": String(S.tab === "resume"), onclick: () => { S.tab = "resume"; renderDetail(); }, text: "Резюме под вакансию"}));
-  $("detail").replaceChildren(head, tabs, S.tab === "resume" ? resumeView(v) : auditView(v));
+  const box = $("detail"), changed = box.dataset.shown !== v.id + "|" + S.tab + "|" + (v.findings || []).length;
+  box.dataset.shown = v.id + "|" + S.tab + "|" + (v.findings || []).length;
+  box.replaceChildren(head, tabs, S.tab === "resume" ? resumeView(v) : auditView(v));
+  if (changed) { box.classList.remove("fade"); void box.offsetWidth; box.classList.add("fade"); }
 }
 
 function auditView(v) {
@@ -254,20 +271,21 @@ async function loadReport() {
   try { setReport(await api("/api/report?kind=" + S.kind)); }
   catch { S.report = null; S.sel = null; render(); }
 }
-function switchKind(kind) {
+function switchKind(kind, quiet) {
   S.kind = kind; S.fKind = null; S.fTopic = null; S.q = ""; $("q").value = "";
   $("segCheck").setAttribute("aria-pressed", String(kind === "check")); $("segLatest").setAttribute("aria-pressed", String(kind === "latest"));
   $("actionsCheck").style.display = kind === "check" ? "contents" : "none"; $("actionsLatest").style.display = kind === "latest" ? "contents" : "none";
-  loadReport();
+  $("jsonLink").href = "/api/report?kind=" + kind;
+  if (!quiet) return loadReport();
 }
 
 $("segCheck").onclick = () => switchKind("check");
 $("segLatest").onclick = () => switchKind("latest");
 $("q").oninput = e => { S.q = e.target.value; renderList(); };
-$("btnSample").onclick = e => busy(e.currentTarget, async () => { banner(""); setReport(await api("/api/check-sample", {method: "POST"})); });
+$("btnSample").onclick = () => startJob("/api/check-sample", {method: "POST"});
 $("btnUpload").onclick = () => $("file").click();
-$("file").onchange = e => { const f = e.target.files[0]; if (!f) return; busy($("btnUpload"), async () => { banner(""); setReport(await api("/api/check?name=" + encodeURIComponent(f.name), {method: "POST", headers: {"Content-Type": "application/json"}, body: await f.text()})); }); e.target.value = ""; };
-$("btnRun").onclick = e => busy(e.currentTarget, async () => { banner("Загружаю вакансии с портала — страница из ста вакансий приходит около 15 секунд…", true); setReport(await api("/api/run?max_vacancies=" + encodeURIComponent($("maxV").value || 200), {method: "POST"})); banner(""); });
+$("file").onchange = async e => { const f = e.target.files[0]; if (!f) return; const body = await f.text(); e.target.value = ""; startJob("/api/check?name=" + encodeURIComponent(f.name), {method: "POST", headers: {"Content-Type": "application/json"}, body}); };
+$("btnRun").onclick = () => startJob("/api/run?max_vacancies=" + encodeURIComponent($("maxV").value || 200), {method: "POST"});
 $("themeBtn").onclick = () => { const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches; const t = dark ? "light" : "dark"; document.documentElement.dataset.theme = t; try { localStorage.setItem("pv-theme", t); } catch { /* без хранилища */ } };
 try { const t = localStorage.getItem("pv-theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch { /* без хранилища */ }
 
@@ -280,7 +298,10 @@ try { const t = localStorage.getItem("pv-theme"); if (t === "light" || t === "da
   try { S.resumes = await api("/api/resumes"); S.resumeId = (S.resumes[0] || {}).id || null; } catch { /* без сценария */ }
   watchCalibration();
   await loadReport();
-  if (!S.report && S.kind === "check") $("btnSample").click();
+  let running = false;
+  try { running = (await api("/api/progress")).state === "running"; } catch { /* старый сервис без показа хода */ }
+  watchJobs();
+  if (!S.report && S.kind === "check" && !running) $("btnSample").click();
 })();
 </script>
 </body>

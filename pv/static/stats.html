@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Статистика — Прозрачная вакансия</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23173a3a'/%3E%3Ccircle cx='14' cy='14' r='6.5' fill='none' stroke='%23f2b441' stroke-width='2.6'/%3E%3Cpath d='m19 19 6 6' stroke='%23f4efe4' stroke-width='2.8' stroke-linecap='round'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="/static/app.css?v=2">
+<link rel="stylesheet" href="/static/app.css?v=4">
 <style>
 .page { max-width: 1120px; margin: 0 auto; padding: 22px 24px 40px; display: grid; gap: 16px; }
 .lead h2 { margin: 0 0 6px; font-size: 26px; letter-spacing: -.02em; }
@@ -27,7 +27,7 @@ td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; white-space:
 .scroll { overflow-x: auto; }
 .meter { display: grid; grid-template-columns: 1fr 74px; gap: 10px; align-items: center; min-width: 200px; }
 .meter .t { height: 10px; border-radius: 5px; background: var(--sunken); overflow: hidden; }
-.meter .t u { display: block; height: 100%; border-radius: 5px; }
+.meter .t u { display: block; height: 100%; border-radius: 5px; transition: width .7s cubic-bezier(.2,.7,.2,1); }
 .meter span { font-variant-numeric: tabular-nums; text-align: right; }
 .bad { color: var(--con); font-weight: 650; } .good { color: var(--ok); font-weight: 650; }
 .muted { color: var(--ink-3); }
@@ -71,7 +71,7 @@ details ul { margin: 8px 0 0; padding-left: 20px; font-size: 13.5px; } details l
   <div id="out"><div class="box muted">Загружаю…</div></div>
 </main>
 
-<script src="/static/calib.js?v=2"></script>
+<script src="/static/calib.js?v=3"></script>
 <script>
 "use strict";
 const TOPICS = {title: "Название должности", duties: "Обязанности", requirements: "Требования", salary: "Оплата", schedule: "График", location: "Место работы", employment: "Тип занятости"};
@@ -156,7 +156,11 @@ function render(d, calib) {
     el("li", {text: "Строка «вместе, после настройки» посчитана на тех же вакансиях, по которым шла настройка. На новых данных результат будет хуже."}),
     el("li", {text: "Вакансий мало — двадцать две. Разница в одно-два замечания может быть случайной."}),
     d.model ? el("li", {text: "Результат относится к модели " + d.model.model + " на этом компьютере. Другая модель покажет другие числа — сервис перенастраивается под неё сам."}) : null)));
-  $("out").replaceChildren(...out);
+  const box = $("out");
+  box.replaceChildren(...out);
+  box.classList.remove("fade"); void box.offsetWidth; box.classList.add("fade");
+  // полосы вырастают от нуля до своего значения
+  for (const u of box.querySelectorAll(".meter u")) { const w = u.style.width; u.style.width = "0"; void u.offsetWidth; u.style.width = w; }
 }
 
 async function load() {

@@ -19,6 +19,7 @@ from typing import Callable
 
 from . import report, scoring, source
 from .analyze import ai, merge, profile, rules
+from .analyze.version import VERSION
 from .config import ROOT
 from .models import LLM, Finding
 from .normalize import normalize
@@ -122,6 +123,7 @@ def run(llm: LLM, progress: Callable[[int, int, float], None] = lambda done, tot
     info = llm.describe() or {}
     return {
         "model": {"provider": info.get("provider"), "model": info.get("model")},
+        "version": VERSION,
         "calibrated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
         "vacancies": total, "errors": errors,
         "seconds_per_vacancy": {"rules": round(rule_time / max(total, 1), 4), "llm": round(llm_time / max(total, 1), 1)},
