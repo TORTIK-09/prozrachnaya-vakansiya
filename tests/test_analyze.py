@@ -286,3 +286,22 @@ def test_experience_norms_are_learned_from_vacancies():
     table = norms.build(vs)
     assert table["groups"] == {"дворн": [12, 0], "пекар": [10, 9]} and table["vacancies"] == 23
     assert norms.key("ПОВАРА горячего цеха") == norms.key("повар") == "повар"
+
+
+def test_model_prompt_carries_the_rule_methodology_and_keeps_it_private():
+    for word in ("Методика проверки", "Полный рабочий день", "посёлок без улицы", "начальная должность", "внутренние"):
+        assert word in ai.SYSTEM, word
+    assert len(ai.SYSTEM) < 7000        # у небольших локальных моделей окно около 4 тысяч токенов
+
+
+def test_forget_removes_local_tuning_data(tmp_path, monkeypatch):
+    from pv import cli, config
+    monkeypatch.setattr(cli, "log", lambda m: None)
+    cfg = config.Config(reports_dir=str(tmp_path))
+    (tmp_path / "profiles").mkdir()
+    (tmp_path / "profiles" / "x.json").write_text("{}", encoding="utf-8")
+    for name in ("cache.json", "experience_norms.json", "latest.json"):
+        (tmp_path / name).write_text("{}", encoding="utf-8")
+    assert cli.cmd_forget(cfg) == 0
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["latest.json"]      # отчёты остаются
+    assert cli.cmd_forget(cfg) == 0

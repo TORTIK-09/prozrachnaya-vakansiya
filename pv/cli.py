@@ -202,6 +202,24 @@ def cmd_learn(cfg: config_mod.Config, count: int) -> int:
     return 0
 
 
+def cmd_forget(cfg: config_mod.Config) -> int:
+    """Удалить всё, что сервис накопил на этом компьютере: профили настройки моделей, выученные нормы, кэш."""
+    import shutil
+    removed = []
+    for p in (cfg.reports / "profiles", cfg.reports / "experience_norms.json", cfg.reports / "cache.json",
+              cfg.reports / "cache-check.json"):
+        if p.is_dir():
+            shutil.rmtree(p)
+            removed.append(p.name)
+        elif p.is_file():
+            p.unlink()
+            removed.append(p.name)
+    log("удалено: " + (", ".join(removed) if removed else "нечего удалять"))
+    log("веса модели сервис не менял, поэтому в самой модели удалять нечего; "
+        "данные, уже отправленные облачному провайдеру, отозвать нельзя — см. docs/spec/06-model-and-data.md")
+    return 0
+
+
 def cmd_resume(cfg: config_mod.Config, resume_id: str, vacancy_id: str, report_path: str, out: str | None) -> int:
     """Свой сценарий: черновик резюме под вакансию из готового отчёта."""
     import json
@@ -246,6 +264,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("calibrate", help="настроить подключённую модель под задачу и сравнить её с правилами")
     p_learn = sub.add_parser("learn", help="пересчитать нормы опыта по должностям на вакансиях портала")
     p_learn.add_argument("--count", type=int, default=400, help="сколько вакансий взять (по умолчанию 400)")
+    sub.add_parser("forget", help="удалить накопленное на этом компьютере: профили моделей, нормы, кэш")
     p_res = sub.add_parser("resume", help="свой сценарий: черновик резюме под вакансию из отчёта")
     p_res.add_argument("--resume", default="RES-01", help="ID резюме из examples/sample_resumes.json")
     p_res.add_argument("--vacancy", required=True, help="ID вакансии из отчёта")
@@ -276,6 +295,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_calibrate(cfg)
     if a.cmd == "learn":
         return cmd_learn(cfg, a.count)
+    if a.cmd == "forget":
+        return cmd_forget(cfg)
     if a.cmd == "resume":
         return cmd_resume(cfg, a.resume, a.vacancy, a.report, a.out)
     return cmd_schedule(cfg, not a.no_llm)
