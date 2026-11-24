@@ -25,7 +25,7 @@
   </div>
   <span class="grow"></span>
   <span id="actionsCheck" style="display:contents">
-    <button class="btn" id="btnSample"><span class="spin"></span>Проверить учебный набор</button>
+    <button class="btn" id="btnSample"><span class="spin"></span><span id="btnSampleText">Проверить учебный набор</span></button>
     <button class="btn primary" id="btnUpload"><span class="spin"></span>Проверить свой JSON…</button>
     <input type="file" id="file" accept=".json,application/json" hidden>
   </span>
@@ -123,7 +123,13 @@ function setReport(rep) {
   if (!vs.some(v => v.id === S.sel)) S.sel = (vs.find(v => (v.findings || []).length) || vs[0] || {}).id || null;
   render();
 }
-function render() { renderSummary(); renderFilters(); renderList(); renderDetail(); }
+function render() { renderSummary(); renderFilters(); renderList(); renderDetail(); sampleButton(); }
+// Надпись на кнопке учебного набора зависит от того, что сейчас на экране: учебный набор или свой JSON.
+function sampleButton() {
+  const src = S.kind === "check" && S.report && !S.report.partial ? S.report.source : null;
+  $("btnSampleText").textContent = !src ? "Проверить учебный набор" : src === "sample_vacancies.json" ? "Проверить учебный набор заново" : "Вернуться к учебному набору";
+  $("btnSample").title = src && src !== "sample_vacancies.json" ? "Сейчас показан отчёт по файлу «" + src + "»" : "";
+}
 
 function renderSummary() {
   const vs = S.report ? S.report.vacancies : [];
