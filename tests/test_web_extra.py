@@ -135,6 +135,12 @@ def test_human_verdict_on_disagreement(client):
     c.post(q + "none")
     f = next(v for v in c.get("/api/report?kind=check").json()["vacancies"] if v["id"] == "DEMO-39-004")["findings"][0]
     assert "verdict" not in f and c.post(q + "кто-то").status_code == 422
+    # история: каждое изменение с прежним и новым выбором и временем; повтор того же выбора в неё не пишется
+    assert [(h["from"], h["to"]) for h in f["history"]] == [(None, "llm"), ("llm", "rule"), ("rule", None)]
+    assert all(h["at"].startswith("20") for h in f["history"])
+    c.post(q + "none")
+    f = next(v for v in c.get("/api/report?kind=check").json()["vacancies"] if v["id"] == "DEMO-39-004")["findings"][0]
+    assert len(f["history"]) == 3 and c.get("/api/stats").json()["verdicts"] == {"rule": 0, "llm": 0}
     # сам файл отчёта решения человека не меняют
     import json as _json
     assert "verdict" not in (cfg.reports / "check.json").read_text(encoding="utf-8")

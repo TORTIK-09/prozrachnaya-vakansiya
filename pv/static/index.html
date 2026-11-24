@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Прозрачная вакансия</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23173a3a'/%3E%3Ccircle cx='14' cy='14' r='6.5' fill='none' stroke='%23f2b441' stroke-width='2.6'/%3E%3Cpath d='m19 19 6 6' stroke='%23f4efe4' stroke-width='2.8' stroke-linecap='round'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="/static/app.css?v=9">
+<link rel="stylesheet" href="/static/app.css?v=10">
 </head>
 <body>
 <header class="top">
@@ -212,12 +212,32 @@ function renderDetail() {
   if (changed) { box.classList.remove("fade"); void box.offsetWidth; box.classList.add("fade"); }
 }
 
+// История решений по замечанию: каким был статус, каким стал и когда.
+function statusAfter(f, choice) {
+  const off = (f.source === "rule" && choice === "llm") || (f.source === "llm" && choice === "rule");
+  return (off ? "проблемы нет" : (KINDS[f.kind] || f.kind)) + (choice ? " — ответ " + (choice === "llm" ? "ИИ" : "правила") : " — решение не принято");
+}
+function fmtWhen(iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) return String(iso);
+  const p = n => String(n).padStart(2, "0");
+  return p(d.getDate()) + "." + p(d.getMonth() + 1) + "." + d.getFullYear() + " " + p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds());
+}
+function historyBlock(f) {
+  const h = f.history || [];
+  if (!h.length) return null;
+  return el("details", {class: "history"}, el("summary", {text: "История решений · " + h.length}),
+    el("ol", {}, h.slice().reverse().map(x => el("li", {}, el("time", {text: fmtWhen(x.at)}), el("span", {text: "было: " + statusAfter(f, x.from)}), el("span", {class: "arrow", text: "→"}), el("b", {text: statusAfter(f, x.to)})))));
+}
+
 // Расхождение: один метод видит проблему, другой — нет. Человек принимает один из ответов.
 function verdictBar(v, f) {
   const ruleSays = f.source === "rule" ? "проблема есть" : "проблемы нет", aiSays = f.source === "llm" ? "проблема есть" : "проблемы нет";
   async function choose(choice) {
     try {
+      const was = f.verdict || null, now = choice === "none" ? null : choice;
       await api("/api/verdict?vacancy_id=" + encodeURIComponent(v.id) + "&topic=" + f.topic + "&kind=" + f.kind + "&choice=" + choice + "&source=" + f.source, {method: "POST"});
+      if (was !== now) (f.history = f.history || []).push({at: new Date().toISOString(), from: was, to: now});
       if (choice === "none") { delete f.verdict; delete f._fresh; } else { f.verdict = choice; f._fresh = true; }
       renderSummary(); renderList(); renderDetail();
       delete f._fresh;          // зелёная пометка показывается один раз — сразу после выбора — и сама гаснет
@@ -267,6 +287,7 @@ function auditView(v) {
       el("div", {text: f.problem}),
       f.rule_problem ? el("details", {class: "rule-says"}, el("summary", {text: "Что пишет правило"}), el("div", {text: f.rule_problem}), el("div", {class: "note", text: f.rule_recommendation})) : null,
       disputed(f) ? verdictBar(v, f) : null,
+      historyBlock(f),
       f.quote ? el("div", {class: "quote"}, el("small", {title: "Поле источника: " + f.field, text: fieldName(f.field)}), "«" + f.quote + "»") : el("div", {class: "quote"}, el("small", {title: "Поле источника: " + f.field, text: fieldName(f.field)}), el("span", {class: "gap-flag", text: "поле пустое"})),
       f.conflict_with ? [el("div", {class: "vs", text: "ПРОТИВ"}), el("div", {class: "quote"}, el("small", {title: "Поле источника: " + f.conflict_with.field, text: fieldName(f.conflict_with.field)}), "«" + f.conflict_with.quote + "»")] : null,
       el("div", {class: "rec"}, el("p", {}, el("b", {text: "Что уточнить. "}), f.recommendation), el("button", {class: "copy", onclick: e => copyText(f.recommendation, e.currentTarget), text: "копировать"}))))

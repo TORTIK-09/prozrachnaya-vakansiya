@@ -146,7 +146,9 @@ def create_app(cfg: config_mod.Config | None = None, auto_calibrate: bool = True
                 for f in v.get("findings", []):
                     hit = saved.get(f"{v.get('id')}|{f.get('topic')}|{f.get('kind')}")
                     if hit:
-                        f["verdict"] = hit["choice"]
+                        if hit.get("choice"):
+                            f["verdict"] = hit["choice"]
+                        f["history"] = hit.get("history", [])
         return rep
 
     def read_report(kind: str) -> dict | None:
@@ -223,11 +225,15 @@ def create_app(cfg: config_mod.Config | None = None, auto_calibrate: bool = True
         key = f"{vacancy_id}|{topic}|{kind}"
         with verdict_lock:
             saved = verdicts()
-            if choice == "none":
-                saved.pop(key, None)
-            else:
-                saved[key] = {"choice": choice, "source": source[:10],
-                              "at": datetime.now().astimezone().isoformat(timespec="seconds")}
+            now = datetime.now().astimezone().isoformat(timespec="seconds")
+            entry = saved.get(key) or {"choice": None, "source": source[:10], "history": []}
+            new = None if choice == "none" else choice
+            if new != entry.get("choice"):
+                # история: что было выбрано до этого, что выбрано теперь и когда
+                entry.setdefault("history", []).append({"at": now, "from": entry.get("choice"), "to": new})
+                entry["history"] = entry["history"][-50:]
+                entry.update(choice=new, at=now)
+            saved[key] = entry
             report.write_json(cfg.reports / "verdicts.json", saved)
         return {"ok": True, "choice": None if choice == "none" else choice}
 
