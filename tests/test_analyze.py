@@ -128,8 +128,9 @@ def test_lookalike_latin_letters_do_not_break_rules():
 
 
 def test_soft_skills_only_requirements():
-    assert ("requirements", "ambiguous") in kinds(vac(requirements="Ответственность, активность."))
-    assert ("requirements", "ambiguous") not in kinds(vac(requirements="Без требований."))
+    blank = {"education": "Не указано", "experience": 0}
+    assert ("requirements", "ambiguous") in kinds(vac(requirements="Ответственность, активность.", requirement=blank))
+    assert ("requirements", "ambiguous") not in kinds(vac(requirements="Без требований.", requirement=blank))
     assert ("requirements", "missing") in kinds(vac(requirements="", requirement={"education": "Не указано", "experience": 0}))
 
 
@@ -305,3 +306,22 @@ def test_forget_removes_local_tuning_data(tmp_path, monkeypatch):
     assert cli.cmd_forget(cfg) == 0
     assert sorted(p.name for p in tmp_path.iterdir()) == ["latest.json"]      # отчёты остаются
     assert cli.cmd_forget(cfg) == 0
+
+
+def test_audit_fixes_on_live_data_patterns():
+    part = "Неполный рабочий день/неполная рабочая неделя"
+    # «неполный рабочий день» не должен читаться как «полный»
+    assert ("employment", "contradiction") not in kinds(vac(schedule=part, employment="Частичная занятость"))
+    assert ("employment", "contradiction") in kinds(vac(schedule=part, employment="Полная занятость"))
+    assert kinds(vac(schedule="Ненормированный рабочий день")) == []
+    # стаж нужен только в одном из вариантов — не противоречие
+    alt = "Высшее юридическое образование или среднее профессиональное образование и стаж работы не менее 5 лет."
+    assert ("requirements", "contradiction") not in kinds(vac(requirements=alt))
+    # одни личные качества в тексте — не замечание, если требования заданы полями
+    assert ("requirements", "ambiguous") not in kinds(vac(requirements="Ответственность, аккуратность."))
+    none = {"education": "Требования не предъявляются", "experience": 0}
+    assert kinds(vac(requirements="Добросовестное отношение к работе", requirement=none, qualification="не требуется")) == []
+    blank = {"education": "Не указано", "experience": 0}
+    assert ("requirements", "ambiguous") in kinds(vac(requirements="Ответственность, активность.", requirement=blank))
+    # «нет» в квалификации — ноль опыта поставлен осознанно, даже у повара
+    assert kinds(vac(**{"job-name": "Повар", "qualification": "нет", "requirement": {"education": "Среднее", "experience": 0}})) == []

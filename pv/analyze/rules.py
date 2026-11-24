@@ -73,13 +73,14 @@ PAY_WORDS = re.compile(r"доплат\w*|надбавк\w*|выплат\w*|пр�
 JUNIOR_TITLE = re.compile(r"стаж[её]р|ученик|младш\w+|помощник|подсобн\w+|разнорабоч\w+|начинающ\w+", I)
 SENIOR_TITLE = re.compile(r"ведущ\w+|главн\w+|старш\w+|руководител\w+|начальник\w*|заведующ\w+|директор\w*|"
                           r"заместител\w+|управляющ\w+", I)
+ALTERNATIVE = re.compile(r"\bили\b|\bлибо\b", I)
 NO_EXP = re.compile(r"без\s+опыта(?:\s+работы)?|опыт\w*(?:\s+работы)?\s+не\s+(?:требуется|обязателен|нужен)", I)
 
 HARD_SKILL = re.compile(
     r"требовани|знани|знать|уметь|аккредитац|лиценз|специальност|професси|владени|навык|опыт|образовани|умени|\bпк\b|"
     r"компьютер|программ|права|категори|удостоверени|допуск|разряд|обучени|работ\w*\s+с\b|диплом|сертификат|"
     r"квалификаци|медицинск|книжк|справк|стаж|язык", I)
-NO_EDUCATION = ("не указано", "не указан", "нет", "не имеет значения")
+NO_EDUCATION = ("не указано", "не указан", "не имеет значения")
 
 STREET = re.compile(
     r"\bул\b|\bулица\b|пр-кт|проспект|\bпер\b|переулок|\bпл\b|площадь|б-р|бульвар|шоссе|\bнаб\b|набережная|"
@@ -90,7 +91,10 @@ VILLAGE = re.compile(r"\bп\b\.?|\bпос\b\.?|пос[её]лок|\bпгт\b|\b�
 PART_TIME_TEXT = re.compile(
     r"частичн\w+\s+занятост\w+|неполн\w+\s+(?:рабоч\w+\s+день|занятост\w+|рабоч\w+\s+недел\w+)|"
     r"0[.,]5\s*ставки|полставки|пол\s+ставки|подработк\w+", I)
-FULL_DAY = re.compile(r"полн\w+\s+рабоч\w+\s+день", I)
+FULL_DAY = re.compile(r"\bполн\w+\s+рабоч\w+\s+день", I)
+# «Ненормированный рабочий день» — режим из Трудового кодекса: обычная рабочая неделя, это не неоднозначность
+STANDARD_DAY = re.compile(r"\bполн\w+\s+рабоч\w+\s+день|ненормированн\w+\s+рабоч\w+\s+день", I)
+PART_DAY = re.compile(r"неполн\w+\s+рабоч\w+\s+(?:день|недел\w+)|частичн\w+\s+занятост\w+", I)
 
 _LOOKALIKE = str.maketrans("aAcCeEoOpPxXyHKMTB", "аАсСеЕоОрРхХуНКМТВ")
 _SENTENCE_END = ".;!?\n"
@@ -165,6 +169,17 @@ def _duties(v: Vacancy) -> list[Finding]:
                     "Уточните у работодателя перечень конкретных регулярных задач по этой должности.")]
 
 
+def _nothing(value: str | None) -> bool:
+    """Поле пустое или в нём «не указано». «Требования не предъявляются» — это ответ, а не пустота."""
+    return not value or norm(value).lower().strip(" .") in NO_EDUCATION
+
+
+def _explicitly_none(value: str | None) -> bool:
+    """В поле прямо сказано, что требований нет."""
+    return bool(value) and bool(re.search(r"^(?:нет|без\s+\w+|не\s+требу\w+|требовани\w+\s+не\s+предъявля\w+)[\s.]*$",
+                                           norm(value).strip(), I))
+
+
 def _zero_experience(v: Vacancy) -> list[Finding]:
     """Опыт 0 и в тексте про опыт ничего: это «опыт не нужен» или поле забыли заполнить?
 
@@ -175,6 +190,8 @@ def _zero_experience(v: Vacancy) -> list[Finding]:
     texts = " ".join(v.text_of(f) for f in (*REQ_FIELDS, "duty"))
     if EXP_NOT_NEEDED.search(norm(texts)) or JUNIOR_TITLE.search(norm(v.title or "")):
         return []
+    if _explicitly_none(v.qualification) and not search(SENIOR_TITLE, v.title or ""):
+        return []           # в квалификации стоит «нет» или «не требуется»: ноль в опыте поставлен осознанно
     senior = search(SENIOR_TITLE, v.title or "")
     if senior:
         return [Finding("requirements", "ambiguous", "requirement.experience", "0",
@@ -203,7 +220,10 @@ def _requirements(v: Vacancy) -> list[Finding]:
             t = v.text_of(f)
             m = EXP_YEARS.search(norm(t))
             if m and int(next(g for g in m.groups() if g)) > exp:
-                years = (f, t[m.start():m.end()].strip(" ,;:"), int(next(g for g in m.groups() if g)))
+                quote = t[m.start():m.end()].strip(" ,;:")
+                if ALTERNATIVE.search(norm(_sentence(t, quote))):
+                    continue        # стаж нужен только в одном из вариантов, а не всем
+                years = (f, quote, int(next(g for g in m.groups() if g)))
                 break
     if years:
         f, quote, n = years
@@ -240,7 +260,7 @@ def _requirements(v: Vacancy) -> list[Finding]:
                 conflict_with=Evidence(hit[0], hit[1])))
 
     if not any(texts):
-        if not v.education or v.education.lower() in NO_EDUCATION:
+        if _nothing(v.education):
             out.append(Finding("requirements", "missing", "requirements", "",
                                "Требования к кандидату не указаны: нет ни уровня образования, ни навыков, ни квалификации.",
                                "Уточните у работодателя требования к образованию, навыкам и квалификации кандидата."))
@@ -252,7 +272,9 @@ def _requirements(v: Vacancy) -> list[Finding]:
         out.append(Finding("requirements", "ambiguous", deferred[0], deferred[1],
                            "Условия отложены до собеседования: из вакансии нельзя понять, что требуется от кандидата и что ему предлагают.",
                            "Уточните у работодателя, какие именно условия и требования обсуждаются на собеседовании, и укажите их в вакансии."))
-    elif sum(len(t) for t in texts) <= 200 and not any(HARD_SKILL.search(norm(t)) for t in texts if t):
+    elif (_nothing(v.education) and _nothing(v.qualification) and not exp
+          and sum(len(t) for t in texts) <= 200 and not any(HARD_SKILL.search(norm(t)) for t in texts if t)):
+        # образование, квалификация или опыт в полях — уже требования: повторять их в тексте работодатель не обязан
         f = next(f for f in REQ_FIELDS if v.text_of(f))
         out.append(Finding("requirements", "ambiguous", f, v.text_of(f),
                            "В требованиях перечислены только общие личные качества: непонятно, какие знания, навыки или образование нужны.",
@@ -316,9 +338,14 @@ def _schedule(v: Vacancy) -> list[Finding]:
                             "Указан сменный график без схемы чередования смен и времени их начала и окончания.",
                             "Уточните у работодателя схему смен (сколько рабочих и выходных дней подряд) и время начала и окончания смены.")]
         return []
-    if search(FULL_DAY, v.schedule) and not search(PART_TIME_TEXT, v.schedule):
+    if search(STANDARD_DAY, v.schedule) and not search(PART_TIME_TEXT, v.schedule):
         # «Полный рабочий день» — общепринятое обозначение пятидневки с восьмичасовым днём: это не неоднозначность
         return []
+    part = search(PART_DAY, v.schedule)
+    if part and not has_time and not has_days and not v.schedule_comment and not v.shifts:
+        return [Finding("schedule", "ambiguous", "schedule", v.schedule,
+                        "Указан неполный рабочий день или неполная неделя, но нигде не сказано, сколько часов и в какие дни нужно работать.",
+                        "Уточните у работодателя количество рабочих часов в день или в неделю и рабочие дни.")]
     if not has_time and not has_days and not v.schedule_comment and not v.shifts:
         return [Finding("schedule", "ambiguous", "schedule", v.schedule,
                         "По указанному режиму нельзя понять, в какие дни и сколько часов предстоит работать.",
