@@ -49,7 +49,7 @@ function showCalibration(c) {
   if (c.state === "running") {
     box.classList.add("show");
     title.textContent = "ИИ калибруется: модель " + calibModel(c) + " — подождите, " + calibDuration(c.eta_seconds);
-    sub.textContent = (c.total ? "Проверено вакансий: " + c.done + " из " + c.total + ". " : "Модель загружается в память. ") + "Сервис встретил эту модель впервые: она разбирает размеченные вакансии, и по результату сервис решает, каким её ответам доверять. До конца калибровки в отчётах работает только Системный AI." + learningText(c);
+    sub.textContent = (c.total ? "Проверено вакансий: " + c.done + " из " + c.total + ". " : "Модель загружается в память. ") + "Модель разбирает размеченные вакансии, и по результату сервис решает, каким её ответам доверять. До конца калибровки в отчётах работает только Системный AI." + learningText(c);
     bar.style.width = (c.total ? Math.max(3, Math.round(c.done / c.total * 100)) : 3) + "%";
   } else if (c.state === "done" && !closed) {
     box.classList.add("show", "done");
