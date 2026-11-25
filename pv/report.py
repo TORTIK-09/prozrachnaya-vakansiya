@@ -161,6 +161,7 @@ def analyze_all(raw_items: list[Any], analyze: Analyze, llm: LLM | None, workers
     stats["parallel_workers"] = effective_workers
     current_chunk_idx = 1
     chunk_llm_calls = 0
+    llm_answered_ids: set[str] = set()
     # В больших пакетах (> 30 вакансий) ограничиваем число долгих GPU-вызовов на чанк одной параллельной волной,
     # а остальные вакансии чанка обрабатываем в 16–64 потока через обученный профиль + правила без очереди
     max_llm_per_chunk = total_count if total_count <= 30 else 4
@@ -175,6 +176,8 @@ def analyze_all(raw_items: list[Any], analyze: Analyze, llm: LLM | None, workers
                 with cache_lock:
                     done_count += 1
                     dc = done_count
+                    if llm is not None:
+                        llm_answered_ids.add(v.id)
                 if on_progress:
                     on_progress(dc, total_count, current_chunk_idx, total_chunks)
                 return hit, None, True, 0
@@ -202,6 +205,8 @@ def analyze_all(raw_items: list[Any], analyze: Analyze, llm: LLM | None, workers
         with cache_lock:
             done_count += 1
             dc = done_count
+            if use_llm is not None:
+                llm_answered_ids.add(v.id)
             if cache is not None:
                 cache.put(v.id, fp, good)
                 if dc % 50 == 0:
@@ -238,18 +243,30 @@ def analyze_all(raw_items: list[Any], analyze: Analyze, llm: LLM | None, workers
     entries, stats = _build_entries(vacancies, results, stats)
     if cache is not None:
         cache.save(keep=seen)
+    if llm_answered_ids:
+        try:
+            from . import calibrate as cal_mod
+            r_dir = Path(cache.path).parent.parent if (cache is not None and getattr(cache, "path", None)) else None
+            cal_mod.mark_hidden_pool_answered(r_dir, llm_answered_ids)
+        except Exception:
+            pass
     return entries, stats
 
 
 def build(entries: list[dict], stats: dict, mode: str, source: str, llm: LLM | None,
           now: datetime | None = None) -> dict:
-    model = {"provider": None, "model": None, "used": False}
+    model = {"provider": None, "model": None, "mode_type": "rules_only", "used": False}
     if llm is not None:
         try:
             info = llm.describe() or {}
         except Exception:
             info = {}
-        model = {"provider": info.get("provider"), "model": info.get("model"), "used": True}
+        model = {
+            "provider": info.get("provider"),
+            "model": info.get("model"),
+            "mode_type": info.get("mode_type"),
+            "used": True,
+        }
     return {
         "generated_at": (now or datetime.now().astimezone()).isoformat(timespec="seconds"),
         "mode": mode, "source": source, "model": model, "stats": stats, "vacancies": entries,

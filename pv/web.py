@@ -156,19 +156,35 @@ def create_app(cfg: config_mod.Config | None = None, auto_calibrate: bool = True
             "calibration": calibration(),
         }
 
+    @app.get("/api/calibration-plan")
+    def get_calibration_plan(model: str = "", mode_type: str = "local", minutes: float | None = None, base_url: str = ""):
+        return llm_mod.compute_calibration_plan(
+            model_name=model or llm_mod.DEFAULT_MODEL,
+            mode_type=mode_type,
+            user_minutes=minutes,
+            base_url=base_url,
+        )
+
     @app.get("/api/model-config")
     def get_model_config():
-        """Возвращает текущие настройки модели/API, пресеты и список найденных локальных моделей."""
+        """Возвращает текущие настройки модели/API, пресеты, характеристики ПК и план калибровки."""
         saved = llm_mod.load_runtime_settings(cfg.reports) or {}
         model = llm()
         info = model.describe() if model else None
         local_models = llm_mod.list_local_models()
+        cur_mode = saved.get("mode_type") or (info.get("mode_type") if info else "local")
+        cur_url = saved.get("base_url") or (info.get("base_url") if info else llm_mod.OLLAMA_URL)
+        cur_model = saved.get("model") or (info.get("model") if info else llm_mod.DEFAULT_MODEL)
+        cur_mins = saved.get("calibration_minutes")
+        plan = llm_mod.compute_calibration_plan(cur_model, cur_mode, user_minutes=cur_mins, base_url=cur_url)
         return {
             "configured": bool(saved.get("configured")),
-            "mode_type": saved.get("mode_type") or (info.get("mode_type") if info else "local"),
+            "mode_type": cur_mode,
             "provider_preset": saved.get("provider_preset") or "ollama",
-            "base_url": saved.get("base_url") or (info.get("base_url") if info else llm_mod.OLLAMA_URL),
-            "model": saved.get("model") or (info.get("model") if info else llm_mod.DEFAULT_MODEL),
+            "base_url": cur_url,
+            "model": cur_model,
+            "calibration_minutes": plan["effective_minutes"],
+            "calibration_plan": plan,
             "has_api_key": bool(saved.get("api_key")),
             "local_models": local_models,
             "presets": llm_mod.PROVIDER_PRESETS,
@@ -179,7 +195,7 @@ def create_app(cfg: config_mod.Config | None = None, auto_calibrate: bool = True
 
     @app.post("/api/model-config")
     async def set_model_config(request: Request):
-        """Сохраняет выбранный пользователем тип модели (Локальная LLM / Свой API / Только правила) и запускает её обучение."""
+        """Сохраняет выбранный пользователем тип модели, время калибровки и запускает раздельную калибровку."""
         try:
             body = await request.json()
         except ValueError:
@@ -196,6 +212,15 @@ def create_app(cfg: config_mod.Config | None = None, auto_calibrate: bool = True
         model_name = str(body.get("model") or preset.get("default_model") or llm_mod.DEFAULT_MODEL).strip()
         api_key = str(body.get("api_key") or "").strip()
         recalibrate = bool(body.get("recalibrate", False))
+        raw_mins = body.get("calibration_minutes")
+        cal_minutes: float | None = None
+        try:
+            if raw_mins is not None and str(raw_mins).strip() != "":
+                cal_minutes = float(raw_mins)
+        except (TypeError, ValueError):
+            cal_minutes = None
+
+        plan = llm_mod.compute_calibration_plan(model_name, mode_type, user_minutes=cal_minutes, base_url=base_url)
 
         prev = llm_mod.load_runtime_settings(cfg.reports) or {}
         if not api_key and prev.get("api_key") and prev.get("base_url") == base_url:
@@ -208,6 +233,7 @@ def create_app(cfg: config_mod.Config | None = None, auto_calibrate: bool = True
             "base_url": base_url,
             "model": model_name,
             "api_key": api_key,
+            "calibration_minutes": plan["effective_minutes"],
         }
         llm_mod.save_runtime_settings(cfg.reports, settings_data)
 
@@ -219,7 +245,13 @@ def create_app(cfg: config_mod.Config | None = None, auto_calibrate: bool = True
             profile.forget()
             prof = profile.load(active_model.describe(), cfg.reports)
             if prof is None or recalibrate:
-                job.start(active_model)
+                job.start(active_model, user_minutes=plan["effective_minutes"])
+        elif mode_type == "rules_only" and recalibrate:
+            threading.Thread(
+                target=calibrate.run_covert_system_ai_pool,
+                args=(cfg.reports, plan["effective_minutes"] * 60.0, plan["system_ai_hidden_pool_target"]),
+                daemon=True,
+            ).start()
 
         cal = calibration()
         info = active_model.describe() if active_model else None
@@ -230,6 +262,7 @@ def create_app(cfg: config_mod.Config | None = None, auto_calibrate: bool = True
             "connected": active_model is not None,
             "model": info,
             "calibration": cal,
+            "calibration_plan": plan,
         })
         resp.set_cookie(
             key="pv_model_configured",
@@ -255,10 +288,34 @@ def create_app(cfg: config_mod.Config | None = None, auto_calibrate: bool = True
         return job.status()
 
     @app.get("/api/stats")
-    def stats():
-        """Сравнение способов работы: только правила, только модель, вместе + учёт всех моделей при смене."""
+    def stats(mode_type: str | None = None):
+        """5 статистик на 5 пунктов выбора типа использования + учёт всех моделей при смене."""
+        saved = llm_mod.load_runtime_settings(cfg.reports) or {}
+        active_model_client = llm()
+        active_info = active_model_client.describe() if active_model_client else (
+            {"provider": saved.get("provider_preset") or "system_ai", "model": saved.get("model") or "Системный AI", "mode_type": "rules_only"}
+            if saved.get("mode_type") == "rules_only"
+            else None
+        )
+        active_mode = mode_type or saved.get("mode_type") or (active_info.get("mode_type") if active_info else "local")
+        if active_mode not in ("local", "custom_api", "local_only", "custom_api_only", "rules_only"):
+            active_mode = "local"
+
         prof = model_profile()
-        data = prof if prof is not None else calibrate.rules_only()
+        fallback_5 = calibrate.rules_only(active_mode=active_mode, model_info=active_info)
+        if prof is not None:
+            # Дополняем загруженный профиль всеми 5 режимами, если в нём были только старые ключи
+            fb_sets = {s["key"]: s["modes"] for s in fallback_5["sets"]}
+            for s in prof.get("sets") or []:
+                s_modes = s.get("modes") or {}
+                fb_m = fb_sets.get(s.get("key"), {})
+                for k5 in ("rules_only", "local_only", "custom_api_only", "local", "custom_api"):
+                    if k5 not in s_modes and k5 in fb_m:
+                        s_modes[k5] = fb_m[k5]
+            prof["active_mode"] = active_mode
+            data = prof
+        else:
+            data = fallback_5
         all_models = []
         p_dir = profile.local_dir(cfg.reports)
         if p_dir.is_dir():
@@ -463,6 +520,79 @@ def create_app(cfg: config_mod.Config | None = None, auto_calibrate: bool = True
 
         threading.Thread(target=_bg_worker, name="bg_run_live", daemon=True).start()
         return dict(state["run_job"])
+
+    @app.post("/api/finding-decision")
+    async def finding_decision(request: Request):
+        """
+        Ручной выбор редактором правильного ответа (Системный AI vs Выбранная ИИ)
+        или изменение статуса замечания (оставить неоднозначность / изменить на противоречие или пропуск / снять).
+        Веса модели при этом НЕ дообучаются.
+        """
+        try:
+            body = await request.json()
+        except ValueError:
+            raise HTTPException(422, "Некорректный JSON решения")
+
+        kind_rep = str(body.get("report_kind") or "check")
+        if kind_rep not in ("check", "latest"):
+            kind_rep = "check"
+        vac_id = str(body.get("vacancy_id") or "")
+        f_idx = int(body.get("finding_index", -1))
+        chosen_source = str(body.get("chosen_source") or "")  # "system_ai" | "selected_ai"
+        new_status = str(body.get("new_status") or "")        # "ambiguous" | "contradiction" | "missing" | "dismiss"
+        custom_rec = body.get("recommendation")
+        custom_prob = body.get("problem")
+
+        rep = read_report(kind_rep)
+        if rep is None:
+            raise HTTPException(404, "Отчёт не найден")
+
+        vacs = rep.get("vacancies") or []
+        entry = next((v for v in vacs if str(v.get("id")) == vac_id), None)
+        if entry is None:
+            raise HTTPException(404, "Вакансия не найдена в отчёте")
+
+        findings = entry.get("findings") or []
+        if not (0 <= f_idx < len(findings)):
+            raise HTTPException(404, "Замечание не найдено")
+
+        if new_status == "dismiss":
+            findings.pop(f_idx)
+        else:
+            item = findings[f_idx]
+            if "system_ai_kind" not in item:
+                item["system_ai_kind"] = item.get("kind") if item.get("source") != "llm" else "ambiguous"
+            if "selected_ai_kind" not in item:
+                orig_k = item.get("kind") or "ambiguous"
+                item["selected_ai_kind"] = orig_k if item.get("source") == "llm" else ("ambiguous" if orig_k == "contradiction" else "contradiction")
+            if new_status in ("ambiguous", "contradiction", "missing"):
+                item["kind"] = new_status
+                if chosen_source == "system_ai":
+                    item["system_ai_kind"] = new_status
+                elif chosen_source == "selected_ai":
+                    item["selected_ai_kind"] = new_status
+                if new_status == "missing":
+                    item["quote"] = ""
+            if chosen_source == "system_ai":
+                item["source"] = "rule"
+                item["chosen_by_editor"] = "system_ai"
+            elif chosen_source == "selected_ai":
+                item["source"] = "llm"
+                item["chosen_by_editor"] = "selected_ai"
+            if isinstance(custom_prob, str) and custom_prob.strip():
+                item["problem"] = custom_prob.strip()
+            if isinstance(custom_rec, str) and custom_rec.strip():
+                item["recommendation"] = custom_rec.strip()
+            item["model_not_retrained"] = True
+
+        # Пересчитываем сводную статистику отчёта
+        if "stats" in rep and isinstance(rep["stats"], dict):
+            rep["stats"]["findings"] = sum(len(v.get("findings") or []) for v in vacs)
+            rep["stats"]["with_findings"] = sum(1 for v in vacs if (v.get("findings") or []))
+
+        target_path = cfg.reports / ("latest.json" if kind_rep == "latest" else "check.json")
+        report.write_json(target_path, rep)
+        return rep
 
     @app.get("/api/resumes")
     def resumes():

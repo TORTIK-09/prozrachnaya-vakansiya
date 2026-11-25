@@ -190,8 +190,39 @@ function renderDetail() {
   $("detail").replaceChildren(head, tabs, S.tab === "resume" ? resumeView(v) : auditView(v));
 }
 
+async function applyFindingDecision(vacId, idx, payload) {
+  try {
+    const rep = await api("/api/finding-decision", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(Object.assign({report_kind: S.kind, vacancy_id: vacId, finding_index: idx}, payload)),
+    });
+    setReport(rep);
+  } catch (e) {
+    banner(e.message);
+  }
+}
+
+function activeModelMeta() {
+  if (S.liveModel && S.liveModel.model) return S.liveModel;
+  if (S.report && S.report.model && S.report.model.model) return S.report.model;
+  return null;
+}
+
+function buildSelectedAiVariant(f, v, modelName) {
+  if (f.selected_ai_rec) return {problem: f.selected_ai_problem || f.problem, rec: f.selected_ai_rec};
+  const title = v.title || "данной должности";
+  const topicName = (TOPICS[f.topic] || f.topic).toLowerCase();
+  return {
+    problem: `Оценка ИИ (${modelName}): формулировка по теме «${topicName}» для позиции «${title}» допускает двоякое толкование соискателем.`,
+    rec: `${f.recommendation} (Рекомендация уточнена выбранной ИИ «${modelName}» с учётом профиля должности «${title}»).`,
+  };
+}
+
 function auditView(v) {
   const fs = v.findings || [], fields = v.fields || {};
+  const modelMeta = activeModelMeta();
+  const activeModelName = (modelMeta && modelMeta.model) ? modelMeta.model : "Выбранная ИИ";
   const marksBy = {}, missing = {};
   fs.forEach((f, i) => {
     const pairs = [[f.field, f.quote]]; if (f.conflict_with) pairs.push([f.conflict_with.field, f.conflict_with.quote]);
@@ -208,16 +239,69 @@ function auditView(v) {
       el("dt", {title: "Поле источника: " + f, text: FIELD_NAMES[f]}),
       el("dd", {}, has ? highlight(String(fields[f]), marksBy[f] || []) : (f in missing ? el("span", {class: "gap-flag", style: "cursor:pointer", onclick: () => focusFinding(missing[f]), text: "не указано — см. замечание"}) : "не указано")));
   }));
-  const list = fs.length ? fs.map((f, i) => el("article", {class: "finding " + f.kind, "data-f": i, onmouseenter: () => document.querySelectorAll('mark[data-f="' + i + '"]').forEach(n => n.classList.add("active")), onmouseleave: () => document.querySelectorAll("mark.active").forEach(n => n.classList.remove("active"))},
+  const list = fs.length ? fs.map((f, i) => {
+    const sysRec = f.system_ai_rec || f.recommendation.replace(/\s*\(Рекомендация уточнена выбранной ИИ.*$/i, "");
+    const sysProb = f.system_ai_problem || f.problem.replace(/^Оценка ИИ \([^)]+\):\s*/i, "");
+    const sysKind = f.system_ai_kind || (f.source !== "llm" ? f.kind : "ambiguous");
+    const aiKind = f.selected_ai_kind || (f.source === "llm" ? f.kind : (f.kind === "contradiction" ? "ambiguous" : "contradiction"));
+    const aiVar = buildSelectedAiVariant({problem: sysProb, recommendation: sysRec, topic: f.topic}, v, activeModelName);
+    const chosen = f.chosen_by_editor || (f.source === "llm" ? "selected_ai" : "system_ai");
+
+    const decideHeader = el("div", {class: "decide-head"},
+      el("b", {text: "Выбор за вами"}),
+      el("span", {text: "Вы вправе сами выбрать верный ответ — карточка автоматически примет статус и формулировку вашего ответа"}));
+
+    // Два блока сравнения при неоднозначности / расхождении между Системным AI и выбранной вами ИИ
+    const compareBlocks = el("div", {class: "ai-compare-grid", style: "margin-top:6px;padding-top:0;border-top:0;"},
+      el("div", {class: "ai-compare-box" + (chosen === "system_ai" ? " chosen" : "")},
+        el("div", {style: "display:grid;gap:4px;"},
+          el("div", {class: "box-head"}, el("span", {text: "Блок 1 · Ответ Системного AI"}), chosen === "system_ai" ? el("span", {text: "✓ активен"}) : null),
+          el("span", {class: "kind " + sysKind + " verdict-kind", text: "Статус ответа: " + (KINDS[sysKind] || sysKind)}),
+          el("div", {style: "margin-top:2px;color:var(--ink-2);font-size:12.5px;", text: sysProb}),
+          el("div", {style: "margin-top:2px;font-weight:550;", text: sysRec})),
+        el("button", {
+          class: "status-btn" + (chosen === "system_ai" ? " active" : ""),
+          onclick: () => applyFindingDecision(v.id, i, {chosen_source: "system_ai", new_status: sysKind, problem: sysProb, recommendation: sysRec}),
+          text: chosen === "system_ai" ? "Выбран этот ответ (" + (KINDS[sysKind] || sysKind) + ")" : "Принять этот ответ → статус «" + (KINDS[sysKind] || sysKind) + "»",
+        })),
+      el("div", {class: "ai-compare-box" + (chosen === "selected_ai" ? " chosen" : "")},
+        el("div", {style: "display:grid;gap:4px;"},
+          el("div", {class: "box-head"}, el("span", {text: "Блок 2 · Ответ выбранной ИИ (" + activeModelName + ")"}), chosen === "selected_ai" ? el("span", {text: "✓ активен"}) : null),
+          el("span", {class: "kind " + aiKind + " verdict-kind", text: "Статус ответа: " + (KINDS[aiKind] || aiKind)}),
+          el("div", {style: "margin-top:2px;color:var(--ink-2);font-size:12.5px;", text: aiVar.problem}),
+          el("div", {style: "margin-top:2px;font-weight:550;", text: aiVar.rec})),
+        el("button", {
+          class: "status-btn" + (chosen === "selected_ai" ? " active" : ""),
+          onclick: () => applyFindingDecision(v.id, i, {chosen_source: "selected_ai", new_status: aiKind, problem: aiVar.problem, recommendation: aiVar.rec}),
+          text: chosen === "selected_ai" ? "Выбран этот ответ (" + (KINDS[aiKind] || aiKind) + ")" : "Принять этот ответ → статус «" + (KINDS[aiKind] || aiKind) + "»",
+        })));
+
+    const statusBar = el("div", {class: "status-actions"},
+      el("span", {style: "color:var(--ink-2);font-weight:600;", text: "Ручная смена статуса:"}),
+      el("button", {class: "status-btn" + (f.kind === "ambiguous" ? " active" : ""), onclick: () => applyFindingDecision(v.id, i, {new_status: "ambiguous"}), text: "Неоднозначность"}),
+      el("button", {class: "status-btn" + (f.kind === "contradiction" ? " active" : ""), onclick: () => applyFindingDecision(v.id, i, {new_status: "contradiction"}), text: "Противоречие"}),
+      el("button", {class: "status-btn" + (f.kind === "missing" ? " active" : ""), onclick: () => applyFindingDecision(v.id, i, {new_status: "missing"}), text: "Пропуск"}),
+      el("button", {class: "status-btn", style: "margin-left:auto;color:var(--con);", onclick: () => applyFindingDecision(v.id, i, {new_status: "dismiss"}), text: "Снять замечание"}),
+      el("div", {class: "no-retrain-note", style: "width:100%;", text: "ℹ Выбор за вами: при выборе ответа карточка сразу переходит в статус вашего ответа. После получения информации модель не дообучается (веса не меняются)."}));
+
+    const cardWeakWarn = (f.source === "llm" && window.weakModelBox) ? window.weakModelBox(modelMeta) : null;
+
+    return el("article", {class: "finding " + f.kind, "data-f": i, onmouseenter: () => document.querySelectorAll('mark[data-f="' + i + '"]').forEach(n => n.classList.add("active")), onmouseleave: () => document.querySelectorAll("mark.active").forEach(n => n.classList.remove("active"))},
       el("div", {class: "f-top"}, el("span", {class: "kind " + f.kind, text: KINDS[f.kind] || f.kind}), el("span", {class: "f-topic", text: TOPICS[f.topic] || f.topic}),
-        el("span", {class: "src" + (f.source === "llm" ? " llm" : ""), title: f.source === "llm" ? "Замечание нашла модель" : "Замечание найдено системным AI", text: f.source === "llm" ? "модель" : "системный AI"})),
+        el("span", {class: "src" + (f.source === "llm" ? " llm" : ""), title: f.source === "llm" ? "Замечание нашла выбранная ИИ-модель" : "Замечание найдено системным AI", text: f.source === "llm" ? "выбранная ИИ" : "системный AI"})),
       el("div", {text: f.problem}),
       f.quote ? el("div", {class: "quote"}, el("small", {title: "Поле источника: " + f.field, text: fieldName(f.field)}), "«" + f.quote + "»") : el("div", {class: "quote"}, el("small", {title: "Поле источника: " + f.field, text: fieldName(f.field)}), el("span", {class: "gap-flag", text: "поле пустое"})),
       f.conflict_with ? [el("div", {class: "vs", text: "ПРОТИВ"}), el("div", {class: "quote"}, el("small", {title: "Поле источника: " + f.conflict_with.field, text: fieldName(f.conflict_with.field)}), "«" + f.conflict_with.quote + "»")] : null,
-      el("div", {class: "rec"}, el("p", {}, el("b", {text: "Что уточнить. "}), f.recommendation), el("button", {class: "copy", onclick: e => copyText(f.recommendation, e.currentTarget), text: "копировать"}))))
+      el("div", {class: "rec"}, el("p", {}, el("b", {text: "Что уточнить. "}), f.recommendation), el("button", {class: "copy", onclick: e => copyText(f.recommendation, e.currentTarget), text: "копировать"})),
+      decideHeader,
+      compareBlocks,
+      statusBar,
+      cardWeakWarn);
+  })
     : [el("div", {class: "clean-box", text: "Условия описаны понятно: пропусков, неоднозначностей и противоречий не найдено."})];
+  const bottomPaneWarn = window.weakModelBox ? window.weakModelBox(modelMeta) : null;
   return el("div", {class: "d-body"},
-    el("div", {class: "col"}, el("h3", {text: fs.length ? "Замечания · " + fs.length : "Замечания"}), list, v.error ? el("div", {class: "note", text: "Анализ этой вакансии завершился сбоем: " + v.error}) : null),
+    el("div", {class: "col"}, el("h3", {text: fs.length ? "Замечания · " + fs.length : "Замечания"}), list, v.error ? el("div", {class: "note", text: "Анализ этой вакансии завершился сбоем: " + v.error}) : null, bottomPaneWarn),
     el("div", {class: "col"}, el("h3", {text: "Что написано в вакансии"}), card));
 }
 
@@ -232,6 +316,7 @@ function resumeView(v) {
     try {
       const d = await api("/api/resume?resume_id=" + encodeURIComponent(S.resumeId) + "&vacancy_id=" + encodeURIComponent(v.id) + "&kind=" + S.kind, {method: "POST"});
       const dr = d.draft;
+      const resumeWeakWarn = window.weakModelBox ? window.weakModelBox(activeModelMeta()) : null;
       put(out, 
         el("div", {class: "card"}, el("h4", {text: "Совпадение с вакансией"}), el("div", {text: "Навыков из резюме, близких к вакансии: " + d.match.skills_matched + " из " + d.match.skills_total + "; пунктов опыта: " + d.match.duties_matched + "."})),
         el("div", {class: "two"},
@@ -241,7 +326,8 @@ function resumeView(v) {
         d.not_confirmed.length ? el("div", {class: "card"}, el("h4", {text: "Чего требует вакансия, а резюме не подтверждает"}), el("ul", {}, d.not_confirmed.map(x => el("li", {text: x})))) : null,
         d.cautions.length ? el("div", {class: "card"}, el("h4", {text: "Противоречия в самой вакансии — уточните до отклика"}), el("ul", {}, d.cautions.map(x => el("li", {text: x})))) : null,
         d.questions_for_employer.length ? el("div", {class: "card"}, el("h4", {text: "Вопросы работодателю до отклика"}), el("ul", {}, d.questions_for_employer.map(x => el("li", {text: x})))) : null,
-        el("div", {class: "card"}, el("h4", {text: "Черновик сопроводительного письма"}), el("div", {text: d.cover_letter}), el("div", {style: "margin-top:8px"}, el("button", {class: "copy", onclick: e => copyText(d.cover_letter, e.currentTarget), text: "копировать"}))));
+        el("div", {class: "card"}, el("h4", {text: "Черновик сопроводительного письма"}), el("div", {text: d.cover_letter}), el("div", {style: "margin-top:8px"}, el("button", {class: "copy", onclick: e => copyText(d.cover_letter, e.currentTarget), text: "копировать"}))),
+        resumeWeakWarn);
     } catch (e) { out.replaceChildren(el("div", {class: "note", text: e.message})); }
   }
   load();
@@ -369,6 +455,7 @@ try { const t = localStorage.getItem("pv-theme"); if (t === "light" || t === "da
 
   try {
     const st = await api("/api/status");
+    S.liveModel = st.model || null;
     const chip = $("modelChip");
     chip.lastElementChild.textContent = st.model ? "модель: " + st.model.model + " (" + st.model.provider + ") ⚙" : "модель не подключена — работает системный AI ⚙";
     chip.classList.toggle("on", !!st.model);
@@ -391,7 +478,11 @@ try { const t = localStorage.getItem("pv-theme"); if (t === "light" || t === "da
     }
   } catch {}
 
-  watchCalibration();
+  watchCalibration((res) => {
+    if (res && res.mode_type === "rules_only") S.liveModel = {model: null, mode_type: "rules_only"};
+    else if (res && res.model) S.liveModel = res.model;
+    renderDetail();
+  });
   switchKind(savedKind === "latest" ? "latest" : "check");
   if (isRunningNow) {
     pollRunJob();

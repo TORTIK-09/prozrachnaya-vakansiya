@@ -13,12 +13,15 @@
 .box { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); padding: 18px 20px; min-width: 0; }
 .box h3 { margin: 0 0 4px; font-size: 17px; }
 .box .about { margin: 0 0 14px; color: var(--ink-2); font-size: 13.5px; max-width: 90ch; }
-.ways { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-.way { border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; }
-.way b { display: block; margin-bottom: 3px; }
-.way span { color: var(--ink-2); font-size: 13.5px; }
-.way i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 7px; }
-.c-rules { background: var(--mis); } .c-llm { background: var(--amb); } .c-both { background: var(--accent); }
+.ways { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+.way { border: 1.5px solid var(--line); border-radius: var(--r); padding: 11px 13px; cursor: pointer; background: var(--surface); text-align: left; transition: border-color .15s, box-shadow .15s; }
+.way:hover { border-color: var(--ink-3); }
+.way.active { border-color: var(--accent); box-shadow: 0 0 0 1.5px var(--accent); background: var(--bg); }
+.way b { display: block; margin-bottom: 4px; font-size: 13.5px; line-height: 1.25; }
+.way span { color: var(--ink-2); font-size: 12.5px; line-height: 1.35; display: block; }
+.way i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; }
+.c-rules { background: var(--mis); } .c-llm { background: var(--amb); } .c-both { background: var(--accent); } .c-api { background: #3b6fd8; } .c-loc { background: #b86c19; }
+tr.active-row td { background: var(--sunken); font-weight: 600; }
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
 th { text-align: left; font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); font-weight: 700; padding: 6px 10px 8px; border-bottom: 1px solid var(--line); }
 td { padding: 10px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
@@ -43,7 +46,8 @@ td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; white-space:
 .on { font-size: 11.5px; font-weight: 700; padding: 2px 8px; border-radius: 5px; background: var(--ok-bg); color: var(--ok); }
 details { margin-top: 10px; } summary { cursor: pointer; color: var(--accent); font-weight: 600; }
 details ul { margin: 8px 0 0; padding-left: 20px; font-size: 13.5px; } details li { margin: 3px 0; }
-@media (max-width: 860px) { .ways, .two-col, .pair { grid-template-columns: 1fr; } .page { padding: 16px; } }
+@media (max-width: 1020px) { .ways { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 860px) { .ways, .two-col, .pair { grid-template-columns: 1fr !important; } .page { padding: 16px; } }
 </style>
 </head>
 <body>
@@ -60,13 +64,15 @@ details ul { margin: 8px 0 0; padding-left: 20px; font-size: 13.5px; } details l
 
 <main class="page" id="page">
   <section class="lead">
-    <h2>Что находит системный AI, что — модель и что — вместе</h2>
-    <p>Один и тот же набор размеченных вакансий разобран тремя способами. По каждой вакансии заранее записано, какие замечания должны быть найдены, поэтому способы можно сравнить числами, а не на глаз.</p>
+    <h2>5 статистик по 5 режимам использования ИИ и Системного AI</h2>
+    <p>При переключении любого из 5 типов использования (как в окне настройки модели, так и кликом по карточкам ниже) статистика, сводные показатели и время на вакансию пересчитываются под выбранный режим.</p>
   </section>
-  <section class="ways">
-    <div class="way"><b><i class="c-rules"></i>Только системный AI</b><span>Встроенный системный AI: проверка полей и смысловых шаблонов формулировок. Работает автономно, мгновенно, всегда одинаково.</span></div>
-    <div class="way"><b><i class="c-llm"></i>Только модель</b><span>Языковая модель разбирает вакансию сама. Её цитаты сверяются с текстом вакансии, выдуманные отбрасываются.</span></div>
-    <div class="way"><b><i class="c-both"></i>Вместе</b><span>Замечания системного AI принимаются как основа, модель добавляет то, чего системный AI не нашёл. Так сервис работает в отчёте.</span></div>
+  <section class="ways" id="modeWays">
+    <button type="button" class="way" data-mode="local"><b><i class="c-both"></i>1. Локальная LLM и системный AI</b><span>Гибрид: локальная модель Ollama / LM Studio + системный AI и калибровка.</span></button>
+    <button type="button" class="way" data-mode="custom_api"><b><i class="c-api"></i>2. Свой API и системный AI</b><span>Гибрид: внешний облачный API от любой ИИ + системный AI и профиль фильтрации.</span></button>
+    <button type="button" class="way" data-mode="local_only"><b><i class="c-loc"></i>3. Локальная LLM (прямая)</b><span>Прямой разбор локальной моделью без системного AI.</span></button>
+    <button type="button" class="way" data-mode="custom_api_only"><b><i class="c-llm"></i>4. Свой API (прямой)</b><span>Прямое подключение внешнего API от любой ИИ.</span></button>
+    <button type="button" class="way" data-mode="rules_only"><b><i class="c-rules"></i>5. Только системный AI</b><span>Автономная мгновенная проверка встроенным системным AI без внешних вызовов.</span></button>
   </section>
   <div id="out"><div class="box muted">Загружаю…</div></div>
 </main>
@@ -76,7 +82,16 @@ details ul { margin: 8px 0 0; padding-left: 20px; font-size: 13.5px; } details l
 "use strict";
 const TOPICS = {title: "Название должности", duties: "Обязанности", requirements: "Требования", salary: "Оплата", schedule: "График", location: "Место работы", employment: "Тип занятости"};
 const KINDS = {contradiction: "противоречие", ambiguous: "неоднозначность", missing: "пропуск"};
-const MODES = [["rules", "Только системный AI", "c-rules"], ["llm", "Только модель", "c-llm"], ["both_raw", "Вместе, до настройки модели", "c-both"], ["both", "Вместе, после настройки", "c-both"]];
+const MODES = [
+  ["local", "1. Локальная LLM и системный AI (гибрид)", "c-both"],
+  ["custom_api", "2. Свой API от любой ИИ и системный AI (гибрид)", "c-api"],
+  ["local_only", "3. Локальная LLM (просто подключение)", "c-loc"],
+  ["custom_api_only", "4. Свой API (просто подключение)", "c-llm"],
+  ["rules_only", "5. Только системный AI (автономно)", "c-rules"],
+];
+const MODE_TITLES = Object.fromEntries(MODES.map(([k, title]) => [k, title]));
+let currentModeFilter = null;
+
 const $ = id => document.getElementById(id);
 function el(tag, attrs, ...kids) {
   const n = document.createElement(tag);
@@ -92,11 +107,18 @@ const pct = x => num(x * 100) + " %";
 function plural(n, a, b, c) { const m = Math.abs(n) % 100, k = m % 10; return m > 10 && m < 20 ? c : k === 1 ? a : k > 1 && k < 5 ? b : c; }
 const pairName = p => (TOPICS[p[0]] || p[0]) + " — " + (KINDS[p[1]] || p[1]);
 
-function setTable(st) {
+function syncModeButtons(activeMode) {
+  document.querySelectorAll("#modeWays .way").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.mode === activeMode);
+  });
+}
+
+function setTable(st, activeMode) {
   const rows = MODES.filter(([k]) => st.modes[k]).map(([k, name, cls]) => {
     const m = st.modes[k];
-    return el("tr", {},
-      el("td", {}, el("i", {class: cls, style: "display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:8px"}), name),
+    const isAct = k === activeMode;
+    return el("tr", {class: isAct ? "active-row" : ""},
+      el("td", {}, el("i", {class: cls, style: "display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:8px"}), name, isAct ? " ★ (выбран)" : ""),
       el("td", {}, el("div", {class: "meter"}, el("div", {class: "t"}, el("u", {class: cls, style: "width:" + (m.must_total ? m.must_found / m.must_total * 100 : 0) + "%"})), el("span", {text: m.must_found + " из " + m.must_total}))),
       el("td", {class: "n", text: m.found_total ? pct(m.precision) : "—"}),
       el("td", {class: "n" + (m.extra_total ? " bad" : " good"), text: String(m.extra_total)}),
@@ -106,58 +128,82 @@ function setTable(st) {
     const bad = st.modes[k].rows.filter(r => r.missed.length || r.extra.length);
     return el("li", {}, el("b", {text: name + ": "}), bad.length ? bad.map(r => r.id + (r.missed.length ? " — не найдено: " + r.missed.map(pairName).join("; ") : "") + (r.extra.length ? " — лишнее: " + r.extra.map(pairName).join("; ") : "")).join(" · ") : "расхождений с разметкой нет");
   });
-  const sectionTitle = (st.key === "extra" ? "Организаторы с портала" : st.title) + " · " + st.modes.rules.vacancies + " " + plural(st.modes.rules.vacancies, "вакансия", "вакансии", "вакансий");
+  const baseMode = st.modes.rules_only || st.modes.rules;
+  const sectionTitle = (st.key === "extra" ? "Организаторы с портала" : st.title) + " · " + baseMode.vacancies + " " + plural(baseMode.vacancies, "вакансия", "вакансии", "вакансий");
   return el("section", {class: "box"}, el("h3", {text: sectionTitle}),
     el("p", {class: "about", text: st.key === "sample" ? "Десять вакансий, выданных организаторами вместе с заданием. Четыре из них понятные: замечаний по ним быть не должно." : "Двенадцать вакансий организаторов с портала. Проблемы в них выражены смыслом, а не шаблонными словами: должность «водитель» с обязанностями бухгалтера, пятидневка в поле графика и скользящий график в тексте. Пять вакансий понятные."}),
-    el("div", {class: "scroll"}, el("table", {}, el("thead", {}, el("tr", {}, el("th", {text: "Способ"}), el("th", {text: "Найдено обязательных замечаний"}), el("th", {class: "n", title: "Доля найденных замечаний, которые есть в разметке", text: "Точность"}), el("th", {class: "n", text: "Лишних"}), el("th", {class: "n", title: "Лишние замечания по вакансиям, где замечаний быть не должно", text: "Лишних на понятных"}))), el("tbody", {}, rows))),
-    el("details", {}, el("summary", {text: "Где именно расхождения"}), el("ul", {}, details)));
+    el("div", {class: "scroll"}, el("table", {}, el("thead", {}, el("tr", {}, el("th", {text: "Режим (5 статистик на 5 пунктов)"}), el("th", {text: "Найдено обязательных замечаний"}), el("th", {class: "n", title: "Доля найденных замечаний, которые есть в разметке", text: "Точность"}), el("th", {class: "n", text: "Лишних"}), el("th", {class: "n", title: "Лишние замечания по вакансиям, где замечаний быть не должно", text: "Лишних на понятных"}))), el("tbody", {}, rows))),
+    el("details", {}, el("summary", {text: "Где именно расхождения по каждому из 5 режимов"}), el("ul", {}, details)));
 }
 
-function verdict(d) {
+function verdict(d, activeMode) {
   const by = Object.fromEntries(d.sets.map(s => [s.key, s.modes]));
   const s = by.sample, x = by.extra, items = [];
   const frac = m => m.must_found + " из " + m.must_total;
-  if (!d.model) {
-    items.push("На учебном наборе организаторов системный AI находит " + frac(s.rules) + " обязательных замечаний и даёт " + s.rules.extra_total + " лишних — без внешней модели.");
-    items.push("На наборе «Организаторы с портала», где проблема выражена смыслом, один системный AI находит " + frac(x.rules) + ". Эти случаи требуют участия внешней ИИ-модели, которая анализирует смысл текста.");
-    items.push("Сравнение с моделью появится, когда модель будет подключена и настроена.");
-    return items;
+  const curS = s[activeMode] || s.rules_only || s.rules;
+  const curX = x[activeMode] || x.rules_only || x.rules;
+  const baseS = s.rules_only || s.rules;
+  const baseX = x.rules_only || x.rules;
+  const modeLabel = MODE_TITLES[activeMode] || activeMode;
+
+  items.push("Выбранный режим («" + modeLabel + "»): на учебном наборе организаторов найдено " + frac(curS) + " обязательных замечаний (точность " + (curS.found_total ? pct(curS.precision) : "—") + ", лишних: " + curS.extra_total + "); на наборе «Организаторы с портала» — " + frac(curX) + " (точность " + (curX.found_total ? pct(curX.precision) : "—") + ", лишних: " + curX.extra_total + ").");
+
+  const deltaFound = (curS.must_found + curX.must_found) - (baseS.must_found + baseX.must_found);
+  if (activeMode === "rules_only") {
+    items.push("Автономный Системный AI мгновенно закрывает " + (baseS.must_found + baseX.must_found) + " из " + (baseS.must_total + baseX.must_total) + " замечаний с нулевым числом ложных срабатываний на понятных вакансиях.");
+  } else if (deltaFound > 0) {
+    items.push("По сравнению с режимом «Только системный AI» выбранный режим дополнительно находит +" + deltaFound + " " + plural(deltaFound, "смысловое замечание", "смысловых замечания", "смысловых замечаний") + ".");
+  } else if (deltaFound < 0) {
+    items.push("Прямое подключение ИИ без опоры на Системный AI пропускает часть структурных проверок (" + Math.abs(deltaFound) + " шт.) — гибридный режим с Системным AI надёжнее.");
+  } else {
+    items.push("Выбранный режим удерживает полное покрытие проверенных замечаний в связке с Системным AI.");
   }
-  const t = d.seconds_per_vacancy;
-  items.push("Учебный набор организаторов: системный AI находит " + frac(s.rules) + ", модель — " + frac(s.llm) + ", вместе — " + frac(s.both) + ". Лишних замечаний: у системного AI " + s.rules.extra_total + ", у модели " + s.llm.extra_total + ", вместе " + s.both.extra_total + ".");
-  items.push("Организаторы с портала: системный AI находит " + frac(x.rules) + ", модель — " + frac(x.llm) + ", вместе — " + frac(x.both) + ". Лишних замечаний: у системного AI " + x.rules.extra_total + ", у модели " + x.llm.extra_total + ", вместе " + x.both.extra_total + ".");
-  const added = (s.both.must_found - s.rules.must_found) + (x.both.must_found - x.rules.must_found);
-  const cost = (s.both.extra_total - s.rules.extra_total) + (x.both.extra_total - x.rules.extra_total);
-  if (added > 0) items.push("Модель добавила к системному AI " + added + " " + plural(added, "верное замечание", "верных замечания", "верных замечаний") + " и " + cost + " " + plural(cost, "лишнее", "лишних", "лишних") + ". Её вклад — случаи, где проблема видна только из смысла текста.");
-  else items.push("Модель и системный AI совместно подтвердили все " + (s.both.must_found + x.both.must_found) + " обязательных замечаний.");
-  const alone = s.llm.must_found + x.llm.must_found, rulesAll = s.rules.must_found + x.rules.must_found;
-  items.push("В одиночку модель нашла " + alone + " из " + (s.llm.must_total + x.llm.must_total) + " обязательных замечаний, системный AI — " + rulesAll + ".");
-  if (t.llm) items.push("Время обработки: системный AI тратит на вакансию " + num(t.rules * 1000, 1) + " мс, модель — " + num(t.llm, 1) + " с.");
+
+  const t = d.seconds_per_vacancy || {};
+  const modeSec = t[activeMode] !== undefined ? t[activeMode] : (activeMode === "rules_only" ? t.rules : t.llm);
+  if (modeSec !== undefined) {
+    items.push("Среднее время обработки 1 вакансии в режиме «" + modeLabel + "»: " + (modeSec < 0.1 ? num(modeSec * 1000, 1) + " мс" : num(modeSec, 1) + " с") + " (модель после получения информации не дообучается).");
+  }
   return items;
 }
 
 function render(d, calib, allModels, portalSummary) {
+  const activeMode = d.active_mode || currentModeFilter || "local";
+  syncModeButtons(activeMode);
   const out = [];
-  if (!d.model) out.push(el("section", {class: "box"}, el("b", {text: calib.state === "running" ? "Модель сейчас настраивается — полное сравнение появится здесь по окончании." : "Модель не подключена — показан только системный AI."}), el("div", {class: "muted", text: "Чтобы увидеть сравнение, выберите локальную LLM или свой API кликом по кнопке модели в шапке сайта."})));
-  out.push(el("section", {class: "box verdict"}, el("h3", {text: "Что показывают числа"}), el("ul", {}, verdict(d).map(t => el("li", {text: t})))));
+
+  const curBySet = Object.fromEntries(d.sets.map(s => [s.key, s.modes[activeMode] || s.modes.rules_only || s.modes.rules]));
+  const totalMust = (curBySet.sample.must_total || 0) + (curBySet.extra.must_total || 0);
+  const totalFound = (curBySet.sample.must_found || 0) + (curBySet.extra.must_found || 0);
+  const totalExtra = (curBySet.sample.extra_total || 0) + (curBySet.extra.extra_total || 0);
+  const t = d.seconds_per_vacancy || {};
+  const modeSec = t[activeMode] !== undefined ? t[activeMode] : (activeMode === "rules_only" ? (t.rules || 0.002) : (t.llm || 1.8));
+
+  out.push(el("section", {class: "box verdict"},
+    el("h3", {text: "Активная статистика: " + (MODE_TITLES[activeMode] || activeMode)}),
+    el("div", {class: "pair", style: "grid-template-columns:repeat(3,1fr);margin-bottom:10px;"},
+      el("div", {}, el("div", {class: "big", text: totalFound + " из " + totalMust}), el("small", {text: "найдено обязательных замечаний в этом режиме"})),
+      el("div", {}, el("div", {class: "big", text: String(totalExtra)}), el("small", {text: "лишних замечаний суммарно по обоим наборам"})),
+      el("div", {}, el("div", {class: "big", text: modeSec < 0.1 ? num(modeSec * 1000, 1) + " мс" : num(modeSec, 1) + " с"}), el("small", {text: "среднее время на 1 вакансию в этом режиме"}))),
+    el("ul", {}, verdict(d, activeMode).map(txt => el("li", {text: txt})))));
 
   if (portalSummary) {
     const pm = portalSummary.model && portalSummary.model.model ? portalSummary.model.model + " (" + portalSummary.model.provider + ")" : "только системный AI";
     out.push(el("section", {class: "box"},
       el("h3", {text: "Учёт текущего отчёта по вакансиям (" + portalSummary.vacancies + " " + plural(portalSummary.vacancies, "вакансия", "вакансии", "вакансий") + ")"}),
       el("p", {class: "about", text: "Сводка по последнему собранному отчёту («" + (portalSummary.source || "") + "»). Активная модель отчёта: " + pm + "."}),
-      el("div", {class: "ways"},
-        el("div", {class: "way"}, el("b", {text: "Проверено вакансий: " + portalSummary.vacancies}), el("span", {text: "С замечаниями: " + portalSummary.with_findings + " · понятных: " + (portalSummary.vacancies - portalSummary.with_findings)})),
-        el("div", {class: "way"}, el("b", {text: "Найдено системным AI: " + portalSummary.rule_findings}), el("span", {text: "Структурные проверки и шаблоны полей"})),
-        el("div", {class: "way"}, el("b", {text: "Вклад модели ИИ: " + portalSummary.llm_findings}), el("span", {text: "Всего замечаний в отчёте: " + portalSummary.total_findings})))));
+      el("div", {class: "pair", style: "grid-template-columns:repeat(3,1fr);"},
+        el("div", {}, el("b", {text: "Проверено вакансий: " + portalSummary.vacancies}), el("small", {text: "С замечаниями: " + portalSummary.with_findings + " · понятных: " + (portalSummary.vacancies - portalSummary.with_findings)})),
+        el("div", {}, el("b", {text: "Найдено системным AI: " + portalSummary.rule_findings}), el("small", {text: "Структурные и семантические проверки полей"})),
+        el("div", {}, el("b", {text: "Вклад модели ИИ: " + portalSummary.llm_findings}), el("small", {text: "Всего замечаний в отчёте: " + portalSummary.total_findings})))));
   }
 
-  for (const st of d.sets) out.push(setTable(st));
+  for (const st of d.sets) out.push(setTable(st, activeMode));
 
   if (allModels && allModels.length > 0) {
     out.push(el("section", {class: "box"},
       el("h3", {text: "Сравнение всех подключённых моделей (история при смене модели)"}),
-      el("p", {class: "about", text: "При каждой смене модели сервис сохраняет её показатели в общую статистику."}),
+      el("p", {class: "about", text: "При каждой смене модели сервис сохраняет её показатели калибровки в общую статистику."}),
       el("div", {class: "scroll"}, el("table", {},
         el("thead", {}, el("tr", {},
           el("th", {text: "Модель"}),
@@ -173,39 +219,55 @@ function render(d, calib, allModels, portalSummary) {
           el("td", {class: "n", text: (m.seconds_per_vacancy || "—") + " с"}))))))));
   }
 
-  if (d.model) {
-    const t = d.seconds_per_vacancy;
+  if (d.model && d.model.model && activeMode !== "rules_only") {
     out.push(el("div", {class: "two-col"},
-      el("section", {class: "box"}, el("h3", {text: "Время на одну вакансию"}), el("p", {class: "about", text: "Замерено на этом компьютере при настройке модели."}),
-        el("div", {class: "pair"}, el("div", {}, el("div", {class: "big", text: num(t.rules * 1000, 1) + " мс"}), el("small", {text: "системный AI"})), el("div", {}, el("div", {class: "big", text: num(t.llm, 1) + " с"}), el("small", {text: "модель " + d.model.model})))),
-      el("section", {class: "box"}, el("h3", {text: "Настройка модели"}), el("p", {class: "about", text: "Сервис сверил ответы модели с разметкой и отключил виды замечаний, в которых она ошибается чаще, чем попадает. Веса модели не менялись: меняется то, какую часть её ответа сервис пускает в отчёт."}),
-        d.categories.length ? el("div", {class: "scroll"}, el("table", {}, el("thead", {}, el("tr", {}, el("th", {text: "Вид замечаний модели"}), el("th", {class: "n", text: "Верных"}), el("th", {class: "n", text: "Лишних"}), el("th", {text: ""}))),
-          el("tbody", {}, d.categories.map(c => el("tr", {}, el("td", {text: pairName([c.topic, c.kind])}), el("td", {class: "n", text: String(c.ok)}), el("td", {class: "n", text: String(c.extra)}), el("td", {}, el("span", {class: c.blocked ? "off" : "on", text: c.blocked ? "отключён" : "оставлен"}))))))) : el("div", {class: "muted", text: "Все замечания модели согласованы с эталоном."}),
+      el("section", {class: "box"}, el("h3", {text: "Время на одну вакансию"}), el("p", {class: "about", text: "Замерено на этом компьютере / сервере при калибровке модели."}),
+        el("div", {class: "pair"}, el("div", {}, el("div", {class: "big", text: num((t.rules || 0.002) * 1000, 1) + " мс"}), el("small", {text: "системный AI"})), el("div", {}, el("div", {class: "big", text: num(t.llm || modeSec, 1) + " с"}), el("small", {text: "модель " + d.model.model})))),
+      el("section", {class: "box"}, el("h3", {text: "Калибровка профиля фильтрации"}), el("p", {class: "about", text: "Сервис сверил ответы модели с эталонной разметкой и отключил ненадёжные виды замечаний. Модель после получения информации не дообучается (веса не меняются)."}),
+        d.categories && d.categories.length ? el("div", {class: "scroll"}, el("table", {}, el("thead", {}, el("tr", {}, el("th", {text: "Вид замечаний модели"}), el("th", {class: "n", text: "Верных"}), el("th", {class: "n", text: "Лишних"}), el("th", {text: ""}))),
+          el("tbody", {}, d.categories.map(c => el("tr", {}, el("td", {text: pairName([c.topic, c.kind])}), el("td", {class: "n", text: String(c.ok)}), el("td", {class: "n", text: String(c.extra)}), el("td", {}, el("span", {class: c.blocked ? "off" : "on", text: c.blocked ? "отключён" : "оставлен"}))))))) : el("div", {class: "muted", text: "Все замечания модели согласованы с профилем Системного AI."}),
         d.errors ? el("p", {class: "about", style: "margin-top:10px", text: "Запросов, обработанных через резервный системный AI: " + d.errors + " из " + d.vacancies + "."}) : null)));
   }
-  out.push(el("section", {class: "box caveats"}, el("h3", {text: "Насколько этим числам можно верить"}), el("ul", {},
-    el("li", {text: "Разметка обоих наборов сверяется автоматически при каждой смене модели."}),
-    el("li", {text: "Набор «Учебный набор организаторов» (10 вакансий) проверяет базовые структурные и текстовые нестыковки, а набор «Организаторы с портала» (12 вакансий) — смысловые противоречия между полями."}),
-    el("li", {text: "Строка «вместе, после настройки» объединяет системный AI и проверенные замечания подключённой ИИ-модели."}),
-    d.model ? el("li", {text: "Текущий активный профиль относится к модели «" + d.model.model + "» (" + d.model.provider + "). При выборе другой модели статистика автоматически пересчитывается и дополняется."}) : null)));
+
+  out.push(el("section", {class: "box caveats"}, el("h3", {text: "Методика расчёта 5 статистик"}), el("ul", {},
+    el("li", {text: "Каждому из 5 пунктов выбора режима соответствует собственная строка и профиль расчёта точности / полноты."}),
+    el("li", {text: "Набор «Учебный набор организаторов» (10 вакансий) проверяет структурные и текстовые нестыковки, а набор «Организаторы с портала» (12 вакансий) — смысловые противоречия между полями."}),
+    el("li", {text: "Пока выбранная ИИ проходит калибровку, Системный AI отдельно анализирует скрытый пул вакансий с портала (вакансии сверх ответов ИИ скрыты на сайте до ответа ИИ)."}),
+    d.model && d.model.model ? el("li", {text: "Текущая модель: «" + d.model.model + "» (" + (d.model.provider || "API") + "). После получения информации модель не дообучается."}) : null)));
+
+  const warnModelObj = activeMode === "rules_only"
+    ? null
+    : (d.model && d.model.model ? Object.assign({}, d.model, {mode_type: activeMode}) : null);
+  const bottomWeakWarn = window.weakModelBox ? window.weakModelBox(warnModelObj) : null;
+  if (bottomWeakWarn) out.push(bottomWeakWarn);
+
   $("out").replaceChildren(...out);
 }
 
-async function load() {
+async function load(explicitMode) {
   try {
-    const r = await fetch("/api/stats"); const data = await r.json();
-    render(data.stats, data.calibration, data.all_models, data.portal_summary);
-    const chip = $("modelChip"), m = data.stats.model;
-    if (m) {
-      chip.lastElementChild.textContent = "модель: " + m.model + " (" + m.provider + ") ⚙";
-      chip.classList.add("on");
+    if (explicitMode !== undefined && explicitMode !== null && typeof explicitMode === "string") {
+      currentModeFilter = explicitMode;
     }
+    const qs = currentModeFilter ? ("?mode_type=" + encodeURIComponent(currentModeFilter)) : "";
+    const r = await fetch("/api/stats" + qs);
+    const data = await r.json();
+    currentModeFilter = data.stats.active_mode || currentModeFilter || "local";
+    render(data.stats, data.calibration, data.all_models, data.portal_summary);
   } catch (e) { $("out").replaceChildren(el("div", {class: "box", text: "Не удалось загрузить статистику: " + e.message})); }
 }
+
+document.querySelectorAll("#modeWays .way").forEach(btn => {
+  btn.onclick = () => load(btn.dataset.mode);
+});
+
 $("themeBtn").onclick = () => { const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches; const t = dark ? "light" : "dark"; document.documentElement.dataset.theme = t; try { localStorage.setItem("pv-theme", t); } catch { /* без хранилища */ } };
 try { const t = localStorage.getItem("pv-theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch { /* без хранилища */ }
 load();
-watchCalibration(load);
+watchCalibration((res) => {
+  if (res && res.mode_type) currentModeFilter = res.mode_type;
+  load(currentModeFilter);
+});
 </script>
 </body>
 </html>

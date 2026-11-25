@@ -20,6 +20,38 @@ function setModelCookie() {
   try { localStorage.setItem("pv_model_configured", "1"); } catch { /* без хранилища */ }
 }
 
+window.assessModelIntelligence = function(modelName, modeType) {
+  if (modeType === "rules_only") return {isWeak: false, reason: ""};
+  const m = String(modelName || "").toLowerCase().trim();
+  if (!m) return {isWeak: true, reason: "модель не указана"};
+  const weakPatterns = [
+    /\b(0\.5b|1b|1\.5b|2b|3b|3\.8b|4b|7b|8b|9b)\b/,
+    /[-_:](0\.5b|1b|1\.5b|2b|3b|3\.8b|4b|7b|8b|9b)\b/,
+    /\b(mini|nano|lite|tiny|small|micro|haiku|flash-lite|gpt-3\.5|turbo|gemma-2-9b|gemma2:9b|phi3|phi-3)\b/,
+    /:free\b/,
+  ];
+  const isWeak = weakPatterns.some(rx => rx.test(m)) || modeType === "local" || modeType === "local_only";
+  return {
+    isWeak,
+    model: modelName || "выбранная модель",
+    warning: `⚠ Внимание: модель «${modelName || "выбранная ИИ"}» имеет ограниченный объём параметров / базовый уровень рассуждений (не является сильной флагманской моделью) и может ошибаться или галлюцинировать. Будьте осторожны с её ответами — обязательно сверяйте их с Системным AI в блоках сравнения внизу каждой карточки!`,
+  };
+};
+
+window.weakModelBox = function(info) {
+  if (!info || !info.model) return null;
+  const check = window.assessModelIntelligence(info.model, info.mode_type);
+  if (!check.isWeak) return null;
+  const box = document.createElement("div");
+  box.className = "weak-model-warn";
+  const b = document.createElement("b");
+  b.textContent = "⚠ Модель «" + info.model + "» — не из сильных";
+  const t = document.createElement("div");
+  t.textContent = "Она может ошибаться и придумывать проблемы, которых нет. Относитесь к её ответам осторожно и сверяйте их с ответом Системного AI.";
+  box.append(b, t);
+  return box;
+};
+
 function updateHeaderChip(info, rulesOnly, calState) {
   const chip = document.getElementById("modelChip");
   if (!chip) return;
@@ -35,7 +67,9 @@ function updateHeaderChip(info, rulesOnly, calState) {
     else if (info.mode_type === "custom_api") modeLabel = (info.provider || "свой API") + " + системный AI";
     else if (info.mode_type === "custom_api_only") modeLabel = (info.provider || "свой API") + " (прямой)";
     const calSuffix = calState === "running" ? " · обучается…" : "";
-    chip.lastElementChild.textContent = "модель: " + info.model + " (" + modeLabel + calSuffix + ") ⚙";
+    const weak = window.assessModelIntelligence(info.model, info.mode_type).isWeak;
+    chip.lastElementChild.textContent = (weak ? "⚠ " : "") + "модель: " + info.model + " (" + modeLabel + calSuffix + ") ⚙";
+    if (weak) chip.title = "Модель не из сильных — будьте осторожны с её ответами. Нажмите, чтобы сменить модель.";
     chip.classList.add("on");
   } else {
     chip.lastElementChild.textContent = (calState === "running" ? "модель обучается…" : "модель не подключена — системный AI") + " ⚙";
@@ -53,21 +87,25 @@ function showCalibration(c, onDone) {
   box.className = "notice";
   close.hidden = true; if (link) link.hidden = true;
   const isLocal = c.model && (c.model.mode_type === "local" || c.model.provider === "ollama" || c.model.provider === "local");
-  const trainKind = isLocal ? "Локальное обучение (калибровка) локального API " : "Обучение (калибровка) под внешний API ";
+  const trainKind = isLocal ? "Раздельная калибровка локальной ИИ " : "Раздельная калибровка внешнего API ";
+  const poolInfo = c.system_ai_covert_pool;
+  const poolNote = poolInfo && poolInfo.total_system_ai_pool
+    ? ` Системный AI отдельно обработал пул ${poolInfo.total_system_ai_pool} вакансий с портала (${poolInfo.hidden_until_llm_count} скрыты до ответа ИИ).`
+    : " Параллельно Системный AI скрытно калибруется на пуле портала (вакансии сверх ответов ИИ остаются скрытыми до ответа ИИ).";
   if (c.state === "running") {
     box.classList.add("show");
     title.textContent = trainKind + calibModel(c) + " — подождите, " + calibDuration(c.eta_seconds);
-    sub.textContent = (c.total ? "Проверено вакансий: " + c.done + " из " + c.total + " (параллельно). " : "Модель загружается. ") + "Сервис сверяет ответы модели с эталонной разметкой и обучает профиль фильтрации. Отчёты можно собирать уже сейчас.";
+    sub.textContent = (c.total ? "Проверено примеров ИИ: " + c.done + " из " + c.total + " (без шаблонности). " : "Модель загружается. ") + poolNote;
     bar.style.width = (c.total ? Math.round(c.done / c.total * 100) : 3) + "%";
   } else if (c.state === "done" && !closed) {
     box.classList.add("show", "done");
-    title.textContent = (isLocal ? "Локальная модель " : "Модель API ") + calibModel(c) + " обучена и настроена";
-    sub.textContent = "Проверено вакансий: " + c.vacancies + (c.errors ? ", без ответа: " + c.errors : "") + ". Отключено ненадёжных видов замечаний: " + c.blocked + ". В среднем " + c.seconds_per_vacancy + " с на вакансию.";
+    title.textContent = (isLocal ? "Локальная модель " : "Модель API ") + calibModel(c) + " откалибрована";
+    sub.textContent = "Проверено примеров ИИ: " + c.vacancies + (c.errors ? ", резерв Системного AI: " + c.errors : "") + ". Отключено ненадёжных видов замечаний: " + c.blocked + ". В среднем " + c.seconds_per_vacancy + " с/вак." + poolNote;
     close.hidden = false; if (link) link.hidden = false;
   } else if (c.state === "failed" && !closed) {
     box.classList.add("show", "failed");
-    title.textContent = "Обучить модель " + calibModel(c) + " не удалось";
-    sub.textContent = (c.error || "") + " Сервис продолжает работать: замечания модели используются без фильтра.";
+    title.textContent = "Откалибровать модель " + calibModel(c) + " не удалось";
+    sub.textContent = (c.error || "") + " Сервис продолжает работать: замечания модели используются под контролем Системного AI.";
     close.hidden = false;
   }
   close.onclick = () => { try { localStorage.setItem(calibKey(c), "1"); } catch { /* без хранилища */ } box.className = "notice"; };
@@ -84,10 +122,82 @@ function openModelSetupModal(cfgData, isFirstRun, onSaved) {
   let presetKey = (cfgData && cfgData.provider_preset) || (modeType === "local" ? "ollama" : "openrouter");
   let baseUrl = (cfgData && cfgData.base_url) || "http://127.0.0.1:11434/v1";
   let modelName = (cfgData && cfgData.model) || (localModels[0] || "qwen2.5:3b");
+  let calibPlan = (cfgData && cfgData.calibration_plan) || null;
+  let calibMinutes = (cfgData && cfgData.calibration_minutes) || (calibPlan ? calibPlan.effective_minutes : 2.0);
+  let planTimer = null;
 
   const backdrop = document.createElement("div");
   backdrop.id = "modelSetupBackdrop";
   backdrop.className = "modal-backdrop";
+
+  function renderPlanDetails(plan) {
+    const host = backdrop.querySelector("#calibPlanDetails");
+    if (!host) return;
+    if (!plan) {
+      host.innerHTML = `<div class="note">Рассчитываю параметры ПК/сервера и индивидуальный лимит тестов для выбранной LLM…</div>`;
+      return;
+    }
+    const hw = plan.hardware || {};
+    const mp = plan.model_meta || {};
+    const gpuStr = hw.gpu_name ? `${hw.gpu_name} (${hw.vram_gb || 0} ГБ VRAM)` : "без дискретной GPU (CPU)";
+    const loadWarn = hw.is_overloaded ? ` · ⚠ высокая загрузка ${hw.cpu_load_pct}%` : ` · загрузка ${hw.cpu_load_pct || 15}%`;
+    const strengthMap = {
+      weak: "базовая / малая модель",
+      medium: "средняя модель",
+      strong: "сильная флагманская модель",
+    };
+    const prioText = plan.priority_owner === "ai"
+      ? "Приоритет при калибровке отдаётся сильной ИИ (или полному согласию с Системным AI)."
+      : plan.priority_owner === "system_ai"
+        ? "Из-за малой мощности модели / нагрузки ПК упор делается на глубокую калибровку Системного AI."
+        : "Сбалансированное согласование Системного AI и выбранной модели.";
+
+    host.innerHTML = `
+      <div class="calib-metrics">
+        <div class="calib-metric">
+          <b>Тестов для этой LLM: ${plan.llm_target_tests} шт.</b>
+          <span>Мин. порог: ${plan.min_tests} · потолок без шаблонности: ${plan.anti_template_cap} примеров</span>
+        </div>
+        <div class="calib-metric">
+          <b>Модель ~${mp.params_b || "?"}B (${strengthMap[mp.strength] || "LLM"})</b>
+          <span>Оценка отклика: ~${plan.sec_per_vacancy_est} с/вак. · лучшее время: до ${plan.best_time_minutes} мин</span>
+        </div>
+        <div class="calib-metric">
+          <b>ПК / Сервер: ${hw.cpu_cores || "?"} ядер · ${hw.ram_gb || "?"} ГБ ОЗУ</b>
+          <span>${gpuStr}${loadWarn}</span>
+        </div>
+      </div>
+      ${plan.time_trimmed ? `
+        <div class="calib-trim-warn">
+          ⏱ Введённое время (${plan.requested_minutes} мин) превышает предел разумности для «${modelName}» — автоматически урезано до оптимального времени <b>${plan.effective_minutes} мин</b> (${plan.anti_template_cap} примеров), чтобы большое число прогонов не уводило профиль в шаблонность.
+        </div>
+      ` : ""}
+      <div class="note" style="line-height:1.4;">
+        <b>Раздельная калибровка Системного AI и ИИ:</b> пока калибруется выбранная ИИ (${plan.llm_target_tests} примеров за ~${plan.effective_minutes} мин), Системный AI отдельно собирает и очищает пул до <b>${plan.system_ai_hidden_pool_target}+</b> вакансий с портала. Все вакансии, обработанные Системным AI сверх ответов ИИ, <b>остаются скрытыми на сайте, пока на них не ответит ИИ</b>. ${prioText}
+      </div>
+    `;
+  }
+
+  async function refreshCalibrationPlan(applyTrimToInput) {
+    try {
+      const qs = new URLSearchParams({
+        model: modelName || "",
+        mode_type: modeType || "local",
+        minutes: String(calibMinutes || ""),
+        base_url: baseUrl || "",
+      });
+      const r = await fetch("/api/calibration-plan?" + qs.toString());
+      if (!r.ok) return;
+      const plan = await r.json();
+      calibPlan = plan;
+      if (applyTrimToInput && plan.time_trimmed) {
+        calibMinutes = plan.effective_minutes;
+        const minInp = backdrop.querySelector("#mCalibMinutes");
+        if (minInp) minInp.value = String(plan.effective_minutes);
+      }
+      renderPlanDetails(plan);
+    } catch { /* фоновый пересчёт */ }
+  }
 
   function renderModalContent() {
     const isConnected = cfgData && cfgData.connected;
@@ -96,37 +206,58 @@ function openModelSetupModal(cfgData, isFirstRun, onSaved) {
       ? "Автопроверка состояния: подключена модель «" + (cfgData.model_info ? cfgData.model_info.model : modelName) + "» (" + (calState === "ready" || calState === "done" ? "профиль обучен" : calState === "running" ? "идёт обучение…" : "готова к обучению") + ")."
       : "Автопроверка состояния: выберите локальную LLM или укажите свой API-ключ для подключения и обучения.";
 
-    const localPresetsHtml = ["ollama", "lmstudio"].map(k => {
+    const localKeys = ["ollama", "lmstudio", "vllm", "jan", "localai"];
+    const cloudKeys = [
+      "openrouter", "openai", "gemini", "anthropic", "deepseek", "grok",
+      "mistral", "groq", "together", "fireworks", "perplexity", "cohere",
+      "qwen_cloud", "yandexgpt", "gigachat", "huggingface", "custom"
+    ];
+
+    const localPresetsHtml = localKeys.map(k => {
       const p = presets[k] || {label: k};
       return `<option value="${k}" ${presetKey === k ? "selected" : ""}>${p.label}</option>`;
     }).join("");
 
-    const cloudPresetsHtml = ["openrouter", "openai", "gemini", "deepseek", "groq", "custom"].map(k => {
+    const cloudPresetsHtml = cloudKeys.map(k => {
       const p = presets[k] || {label: k};
       return `<option value="${k}" ${presetKey === k ? "selected" : ""}>${p.label}</option>`;
     }).join("");
 
-    const localModelsDatalist = localModels.map(m => `<option value="${m}">${m}</option>`).join("");
+    const activePresetObj = presets[presetKey] || {};
+    const presetModels = Array.isArray(activePresetObj.models) ? activePresetObj.models : [];
+    const combinedLocalModels = Array.from(new Set([...localModels, ...presetModels]));
+    const localModelsDatalist = combinedLocalModels.map(m => `<option value="${m}">${m}</option>`).join("");
+    const cloudModelsDatalist = presetModels.map(m => `<option value="${m}">${m}</option>`).join("");
 
     backdrop.innerHTML = `
       <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
         <div class="modal-head">
           <h3 id="modalTitle">${isFirstRun ? "Выбор модели и типа ИИ (первый запуск)" : "Настройка модели и API ИИ"}</h3>
-          <p>Выберите, какую модель использовать для проверки вакансий и автоматического обучения профиля. После сохранения это окно больше не будет появляться автоматически.</p>
+          <p>Полный маппинг всех известных локальных LLM и облачных ИИ-провайдеров. После сохранения это окно больше не будет появляться автоматически.</p>
         </div>
 
         <div class="modal-status ${isConnected ? "" : "warn"}">${statusText}</div>
+
+        <div class="modal-warning">
+          <b>⚠ Важное предупреждение о работе ИИ и отсутствии дообучения модели</b>
+          <ul>
+            <li><b>Слабая ИИ-модель может ошибаться:</b> при малой мощности выбранной LLM возможны неточности или расхождения в оценке условий вакансии.</li>
+            <li><b>Два блока сравнения в неоднозначностях:</b> на случай расхождения между <b>Системным AI</b> и <b>выбранной вами ИИ</b> в карточке замечания выводятся два блока — «Ответ Системного AI» и «Ответ выбранной вами ИИ».</li>
+            <li><b>Выбор за вами:</b> если ответы расходятся, решение принимаете вы. Нажмите «Принять этот ответ» в нужном блоке — замечание примет его статус и формулировку. Можно и просто поменять статус вручную или снять замечание.</li>
+            <li><b>Модель после получения информации не дообучается:</b> веса нейросети не изменяются, а полученные данные и ваши решения не используются для дообучения модели.</li>
+          </ul>
+        </div>
 
         <div class="mode-cards" style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;">
           <button type="button" class="mode-card ${modeType === "local" ? "active" : ""}" data-mode="local">
             <span class="card-badge">Гибрид · Локально</span>
             <b>Локальная LLM и системный AI</b>
-            <span>Ollama / LM Studio на вашем ПК + системный AI и локальное обучение.</span>
+            <span>Ollama / LM Studio / vLLM / Jan + системный AI и локальная калибровка.</span>
           </button>
           <button type="button" class="mode-card ${modeType === "custom_api" ? "active" : ""}" data-mode="custom_api">
             <span class="card-badge">Гибрид · Облако</span>
             <b>Свой API от любой ИИ и системный AI</b>
-            <span>OpenRouter, OpenAI, Gemini, DeepSeek, Groq + обучение на системном AI.</span>
+            <span>OpenAI, Gemini, Claude, DeepSeek, Grok, OpenRouter, GigaChat, YandexGPT + системный AI.</span>
           </button>
           <button type="button" class="mode-card ${modeType === "local_only" ? "active" : ""}" data-mode="local_only">
             <span class="card-badge">Только локальная ИИ</span>
@@ -147,6 +278,21 @@ function openModelSetupModal(cfgData, isFirstRun, onSaved) {
           </button>
         </div>
 
+        <div class="calib-block" id="calibrationBlock">
+          <div class="calib-block-head">
+            <b>Блок «Калибровка» (индивидуально под выбранную LLM и характеристики ПК/сервера)</b>
+            <span class="pill ok">Без шаблонности · Веса не меняются</span>
+          </div>
+          <div class="form-row" style="grid-template-columns:1fr auto;align-items:center;gap:12px;">
+            <label for="mCalibMinutes" style="margin:0;">
+              Количество времени, которое вы готовы потратить на калибровку ИИ (в минутах):
+              <div class="note" style="font-weight:400;">Число вакансий на калибровку = характеристики ПК/сервера + время. Если введено больше предела разумности — время автоматически урезается под лучшее время обучения.</div>
+            </label>
+            <input type="number" id="mCalibMinutes" min="0.5" max="120" step="0.5" value="${calibMinutes}" style="width:110px;text-align:right;font-weight:650;">
+          </div>
+          <div id="calibPlanDetails"></div>
+        </div>
+
         <div id="modeFormContainer">
           ${(modeType === "local" || modeType === "local_only") ? `
             <div class="form-grid">
@@ -159,19 +305,19 @@ function openModelSetupModal(cfgData, isFirstRun, onSaved) {
                 <input type="text" id="mBaseUrl" value="${baseUrl}" placeholder="http://127.0.0.1:11434/v1">
               </div>
               <div class="form-row">
-                <label>Локальная модель (найдено в Ollama: ${localModels.length ? localModels.join(", ") : "укажите имя"})</label>
+                <label>Локальная модель (доступные и известные модели в выпадающем списке)</label>
                 <input type="text" id="mModel" list="localModelsList" value="${modelName}" placeholder="qwen2.5:3b">
                 <datalist id="localModelsList">${localModelsDatalist}</datalist>
               </div>
               <label style="display:flex;gap:8px;align-items:center;font-size:13px;cursor:pointer;">
                 <input type="checkbox" id="mRecalibrate" checked>
-                <span>${modeType === "local" ? "Обучить локальный API и системный AI и учесть в статистике" : "Проверить подключение локальной LLM и учесть в статистике"}</span>
+                <span>${modeType === "local" ? "Откалибровать профиль локального API и системного AI (модель не дообучается)" : "Проверить подключение локальной LLM и учесть в статистике (модель не дообучается)"}</span>
               </label>
             </div>
           ` : (modeType === "custom_api" || modeType === "custom_api_only") ? `
             <div class="form-grid">
               <div class="form-row">
-                <label>Провайдер ИИ API</label>
+                <label>Провайдер ИИ API (все известные ИИ)</label>
                 <select id="mPreset">${cloudPresetsHtml}</select>
               </div>
               <div class="form-row">
@@ -179,8 +325,9 @@ function openModelSetupModal(cfgData, isFirstRun, onSaved) {
                 <input type="text" id="mBaseUrl" value="${baseUrl}" placeholder="https://openrouter.ai/api/v1">
               </div>
               <div class="form-row">
-                <label>Название модели (Model ID)</label>
-                <input type="text" id="mModel" value="${modelName}" placeholder="google/gemma-3-27b-it:free или gemini-2.5-flash">
+                <label>Название модели (выберите из списка известных моделей провайдера или введите своё)</label>
+                <input type="text" id="mModel" list="cloudModelsList" value="${modelName}" placeholder="google/gemma-3-27b-it:free или gemini-2.5-flash">
+                <datalist id="cloudModelsList">${cloudModelsDatalist}</datalist>
               </div>
               <div class="form-row">
                 <label>Ваш API-ключ (хранится только локально вне репозитория)</label>
@@ -188,20 +335,25 @@ function openModelSetupModal(cfgData, isFirstRun, onSaved) {
               </div>
               <label style="display:flex;gap:8px;align-items:center;font-size:13px;cursor:pointer;">
                 <input type="checkbox" id="mRecalibrate" checked>
-                <span>${modeType === "custom_api" ? "Обучить сервис под этот API на базе системного AI и учесть в статистике" : "Проверить подключение своего API и учесть модель в статистике"}</span>
+                <span>${modeType === "custom_api" ? "Откалибровать профиль под этот API с системным AI (модель не дообучается)" : "Проверить подключение своего API и учесть в статистике (модель не дообучается)"}</span>
               </label>
             </div>
           ` : `
             <div class="form-grid">
               <div style="font-size:13.5px;color:var(--ink-2);">
-                В режиме «Только системный AI» сервис проверяет все вакансии встроенным системным AI за доли секунды. Вы всегда сможете переключиться на локальную LLM или свой API кликом по плашке модели в шапке сайта.
+                В режиме «Только системный AI» сервис проверяет все вакансии встроенным системным AI за доли секунды. Модель после получения информации не дообучается.
               </div>
             </div>
           `}
         </div>
 
+        <div id="bottomWeakModelWarn" class="modal-warning" style="border-color:var(--con-line);background:var(--con-bg);color:var(--con); ${window.assessModelIntelligence(modelName, modeType).isWeak ? "" : "display:none;"}">
+          <b style="color:var(--con);">⚠ Осторожно: выбранная модель обладает базовым уровнем рассуждений</b>
+          <div>${window.assessModelIntelligence(modelName, modeType).warning}</div>
+        </div>
+
         <div class="modal-foot">
-          <span class="note">Количество чанков рассчитывается динамически под общий объём вакансий.</span>
+          <span class="note">После получения информации модель не дообучается · Чанки рассчитываются динамически.</span>
           <div style="display:flex;gap:8px;">
             ${!isFirstRun ? `<button type="button" class="btn" id="mCancelBtn">Закрыть</button>` : ""}
             <button type="button" class="btn primary" id="mSaveBtn"><span class="spin"></span>Сохранить и продолжить</button>
@@ -210,19 +362,62 @@ function openModelSetupModal(cfgData, isFirstRun, onSaved) {
       </div>
     `;
 
+    renderPlanDetails(calibPlan);
+    refreshCalibrationPlan(false);
+
+    const calibMinInput = backdrop.querySelector("#mCalibMinutes");
+    if (calibMinInput) {
+      calibMinInput.oninput = () => {
+        const val = parseFloat(calibMinInput.value);
+        if (!Number.isNaN(val) && val > 0) calibMinutes = val;
+        if (planTimer) clearTimeout(planTimer);
+        planTimer = setTimeout(() => refreshCalibrationPlan(false), 220);
+      };
+      calibMinInput.onchange = () => {
+        const val = parseFloat(calibMinInput.value);
+        if (!Number.isNaN(val) && val > 0) calibMinutes = val;
+        refreshCalibrationPlan(true);
+      };
+    }
+
+    const urlInputEl = backdrop.querySelector("#mBaseUrl");
+    if (urlInputEl) {
+      urlInputEl.oninput = () => {
+        baseUrl = urlInputEl.value.trim();
+        if (planTimer) clearTimeout(planTimer);
+        planTimer = setTimeout(() => refreshCalibrationPlan(false), 300);
+      };
+    }
+
+    const modInputEl = backdrop.querySelector("#mModel");
+    if (modInputEl) {
+      modInputEl.oninput = () => {
+        modelName = modInputEl.value.trim();
+        const bw = backdrop.querySelector("#bottomWeakModelWarn");
+        if (bw) {
+          const check = window.assessModelIntelligence(modelName, modeType);
+          bw.style.display = check.isWeak ? "grid" : "none";
+          const div = bw.querySelector("div");
+          if (div) div.textContent = check.warning;
+        }
+        if (planTimer) clearTimeout(planTimer);
+        planTimer = setTimeout(() => refreshCalibrationPlan(false), 220);
+      };
+    }
+
     backdrop.querySelectorAll(".mode-card").forEach(btn => {
       btn.onclick = () => {
         modeType = btn.dataset.mode;
         if (modeType === "local" || modeType === "local_only") {
-          presetKey = "ollama";
-          baseUrl = (presets.ollama && presets.ollama.base_url) || "http://127.0.0.1:11434/v1";
-          modelName = localModels[0] || "qwen2.5:3b";
+          if (!localKeys.includes(presetKey)) presetKey = "ollama";
+          const p = presets[presetKey] || presets.ollama || {};
+          baseUrl = p.base_url || "http://127.0.0.1:11434/v1";
+          modelName = localModels[0] || p.default_model || "qwen2.5:3b";
         } else if (modeType === "custom_api" || modeType === "custom_api_only") {
-          if (presetKey === "ollama" || presetKey === "lmstudio") {
-            presetKey = "openrouter";
-            baseUrl = (presets.openrouter && presets.openrouter.base_url) || "https://openrouter.ai/api/v1";
-            modelName = (presets.openrouter && presets.openrouter.default_model) || "google/gemma-3-27b-it:free";
-          }
+          if (!cloudKeys.includes(presetKey)) presetKey = "openrouter";
+          const p = presets[presetKey] || presets.openrouter || {};
+          baseUrl = p.base_url || "https://openrouter.ai/api/v1";
+          modelName = p.default_model || "google/gemma-3-27b-it:free";
         }
         renderModalContent();
       };
@@ -234,13 +429,10 @@ function openModelSetupModal(cfgData, isFirstRun, onSaved) {
         presetKey = presetSel.value;
         const p = presets[presetKey];
         if (p) {
-          if (p.base_url) baseUrl = p.base_url;
-          if (p.default_model) modelName = p.default_model;
-          const urlInp = backdrop.querySelector("#mBaseUrl");
-          const modInp = backdrop.querySelector("#mModel");
-          if (urlInp && p.base_url) urlInp.value = p.base_url;
-          if (modInp && p.default_model) modInp.value = p.default_model;
+          if (p.base_url !== undefined) baseUrl = p.base_url;
+          if (p.default_model !== undefined) modelName = p.default_model;
         }
+        renderModalContent();
       };
     }
 
@@ -260,6 +452,7 @@ function openModelSetupModal(cfgData, isFirstRun, onSaved) {
       const modInp = backdrop.querySelector("#mModel");
       const keyInp = backdrop.querySelector("#mApiKey");
       const recalInp = backdrop.querySelector("#mRecalibrate");
+      const minInp = backdrop.querySelector("#mCalibMinutes");
 
       const payload = {
         mode_type: modeType,
@@ -268,6 +461,7 @@ function openModelSetupModal(cfgData, isFirstRun, onSaved) {
         model: modInp ? modInp.value.trim() : modelName,
         api_key: keyInp ? keyInp.value.trim() : "",
         recalibrate: recalInp ? recalInp.checked : false,
+        calibration_minutes: minInp ? parseFloat(minInp.value) || calibMinutes : calibMinutes,
       };
 
       try {
