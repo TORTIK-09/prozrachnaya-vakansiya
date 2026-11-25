@@ -158,6 +158,44 @@ def create_app(cfg: config_mod.Config | None = None, auto_calibrate: bool = True
         except (ValueError, OSError):
             return None
 
+    def read_sample_report() -> dict | None:
+        """Сохранённый отчёт по учебному набору — основа, которую не трогает загрузка пользовательского JSON."""
+        p = cfg.reports / "check-sample.json"
+        if p.is_file():
+            try:
+                return json.loads(p.read_text(encoding="utf-8"))
+            except (ValueError, OSError):
+                return None
+        cur = read_report("check")
+        if cur and cur.get("source") == SAMPLE.name and not cur.get("imported_source"):
+            report.write_json(p, cur)
+            return cur
+        return None
+
+    def merge_with_sample(imported_rep: dict, sample_rep: dict) -> dict:
+        """Объединяет загруженный JSON с сохранённым учебным набором без повторного анализа учебного набора."""
+        imp_vacancies = list(imported_rep.get("vacancies") or [])
+        imp_ids = [str(v.get("id")) for v in imp_vacancies]
+        imp_set = set(imp_ids)
+        base_vacancies = [v for v in (sample_rep.get("vacancies") or []) if str(v.get("id")) not in imp_set]
+        merged = imp_vacancies + base_vacancies
+        stats = dict(imported_rep.get("stats") or {})
+        stats.update(
+            vacancies=len(merged),
+            with_findings=sum(1 for v in merged if v.get("findings")),
+            findings=sum(len(v.get("findings") or []) for v in merged),
+            imported=len(imp_vacancies),
+        )
+        src = str(imported_rep.get("source") or "")
+        return {
+            **imported_rep,
+            "source": f"{SAMPLE.name} + {src}" if src else SAMPLE.name,
+            "imported_source": src or "загруженный файл",
+            "imported_ids": imp_ids,
+            "stats": stats,
+            "vacancies": merged,
+        }
+
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
     @app.get("/")
@@ -235,7 +273,7 @@ def create_app(cfg: config_mod.Config | None = None, auto_calibrate: bool = True
         """Мгновенный предварительный результат одних правил — пока модель думает, страница уже не пустая."""
         report.analyze_all(raw, lambda v, m=None: rules.check(v), None, cfg.workers, None, "", cli.log, progress.pending)
 
-    def work_check(raw: list, src: str):
+    def work_check(raw: list, src: str, is_sample: bool = False):
         def fn(on_entry, on_log):
             analyzer, _ = cli.get_analyzer()
             model = llm()
@@ -243,6 +281,13 @@ def create_app(cfg: config_mod.Config | None = None, auto_calibrate: bool = True
                 preview(raw)
             entries, stats = report.analyze_all(raw, analyzer, model, cfg.workers, None, "", cli.log, on_entry)
             rep = report.build(entries, stats, "file", src, model)
+            if is_sample:
+                report.write_json(cfg.reports / "check-sample.json", rep)
+                report.write_json(cfg.reports / "check.json", rep)
+                return rep, None
+            sample_rep = read_sample_report()
+            if sample_rep is not None:
+                rep = merge_with_sample(rep, sample_rep)
             report.write_json(cfg.reports / "check.json", rep)
             return rep, None
         return fn
@@ -291,8 +336,16 @@ def create_app(cfg: config_mod.Config | None = None, auto_calibrate: bool = True
         return progress.snapshot(max(0, since))
 
     @app.post("/api/check-sample")
-    def check_sample(background: bool = False):
-        return launch("check", SAMPLE.name, work_check(source.load_file(SAMPLE), SAMPLE.name), background)
+    def check_sample(background: bool = False, restore: bool = False):
+        cur = read_report("check")
+        sample_rep = read_sample_report()
+        if sample_rep is not None and (restore or (cur and cur.get("imported_source"))):
+            if progress.snapshot(0).get("state") == "running":
+                raise HTTPException(409, "Проверка уже идёт — дождитесь её окончания")
+            with lock:
+                report.write_json(cfg.reports / "check.json", sample_rep)
+            return with_verdicts(sample_rep)
+        return launch("check", SAMPLE.name, work_check(source.load_file(SAMPLE), SAMPLE.name, is_sample=True), background)
 
     @app.post("/api/check")
     async def check_upload(request: Request, name: str = "загруженный файл", background: bool = False):

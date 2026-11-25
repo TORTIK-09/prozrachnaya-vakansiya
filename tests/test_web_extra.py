@@ -47,6 +47,48 @@ def test_upload(client):
     assert c.post("/api/check", content='{"что-то": 1}').status_code == 422
 
 
+def test_upload_keeps_sample_replaces_prev_json_and_restores_without_reanalysis(tmp_path, monkeypatch):
+    calls: list[str] = []
+
+    def tracking_analyzer(v, llm=None):
+        calls.append(v.id)
+        return []
+
+    monkeypatch.setattr(cli, "get_analyzer", lambda: (tracking_analyzer, "track"))
+    monkeypatch.setattr(cli, "make_llm", lambda c, enabled: None)
+    monkeypatch.setattr(cli, "log", lambda m: None)
+    cfg = config.Config(reports_dir=str(tmp_path / "reports"), workers=1)
+    c = TestClient(web.create_app(cfg, auto_calibrate=False), base_url="http://127.0.0.1:8085")
+
+    # 1. Загружаем учебный набор — разбираются ровно 10 учебных вакансий
+    rep0 = c.post("/api/check-sample").json()
+    assert len(rep0["vacancies"]) == 10 and len(calls) == 10
+    calls.clear()
+
+    # 2. Импортируем первый JSON — учебный набор НЕ пересчитывается, данные добавляются к нему
+    j1 = json.dumps({"results": {"vacancies": [{"vacancy": {"id": "IMP-1", "job-name": "Токарь"}}]}})
+    rep1 = c.post("/api/check?name=first.json", content=j1, headers={"content-type": "application/json"}).json()
+    assert calls == ["IMP-1"]
+    assert rep1["imported_source"] == "first.json" and rep1["imported_ids"] == ["IMP-1"]
+    assert len(rep1["vacancies"]) == 11 and rep1["vacancies"][0]["id"] == "IMP-1"
+    calls.clear()
+
+    # 3. Импортируем второй JSON — данные первого убираются, учебный набор остаётся без пересчёта
+    j2 = json.dumps({"results": {"vacancies": [{"vacancy": {"id": "IMP-2", "job-name": "Сварщик"}}]}})
+    rep2 = c.post("/api/check?name=second.json", content=j2, headers={"content-type": "application/json"}).json()
+    assert calls == ["IMP-2"]
+    ids2 = [v["id"] for v in rep2["vacancies"]]
+    assert "IMP-2" in ids2 and "IMP-1" not in ids2 and len(ids2) == 11
+    assert rep2["imported_source"] == "second.json"
+    calls.clear()
+
+    # 4. Возврат к учебному набору — убираются только импортированные данные, учебный набор не пересчитывается
+    rep3 = c.post("/api/check-sample?restore=1").json()
+    assert calls == []
+    assert len(rep3["vacancies"]) == 10 and "imported_source" not in rep3
+    assert all(v["id"].startswith("DEMO-39-") for v in rep3["vacancies"])
+
+
 def test_foreign_host_and_origin_rejected(client):
     c, _ = client
     assert c.get("/api/status", headers={"host": "evil.example"}).status_code == 403
@@ -149,4 +191,28 @@ def test_sample_resume_draft_is_fresh_and_has_no_invented_facts():
     vac = next(v for v in rep["vacancies"] if str(v["id"]) == str(saved["vacancy"]["id"]))
     assert saved == resume_mod.draft(res, vac)
     assert resume_mod.invented(saved, res) == []
+
+
+def test_not_confirmed_checks_text_requirements_and_text_experience():
+    rep = json.loads((config.ROOT / "examples" / "sample_report.json").read_text(encoding="utf-8"))
+    by_id = {v["id"]: v for v in rep["vacancies"]}
+    resumes = {r["id"]: r for r in resume_mod.load_resumes()}
+
+    # подходящие кандидаты не получают ложных пробелов по своим навыкам
+    assert resume_mod.draft(resumes["RES-01"], by_id["DEMO-39-001"])["not_confirmed"] == []
+    assert resume_mod.draft(resumes["RES-02"], by_id["DEMO-39-007"])["not_confirmed"] == []
+
+    # неподходящий кандидат получает конкретные неподтверждённые навыки из текста
+    gaps_01_07 = resume_mod.draft(resumes["RES-01"], by_id["DEMO-39-007"])["not_confirmed"]
+    assert any("Windows" in g for g in gaps_01_07)
+
+    # опыт из текста (5 лет при 0 в поле) и SQL попадают в not_confirmed
+    gaps_02_03 = resume_mod.draft(resumes["RES-02"], by_id["DEMO-39-003"])["not_confirmed"]
+    assert any("5 лет" in g for g in gaps_02_03)
+    assert any("SQL" in g for g in gaps_02_03)
+
+    # общие личные качества и «приветствуется» не считаются неподтверждёнными требованиями
+    assert resume_mod.draft(resumes["RES-03"], by_id["DEMO-39-002"])["not_confirmed"] == []
+    assert resume_mod.draft(resumes["RES-03"], by_id["DEMO-39-006"])["not_confirmed"] == []
+
 

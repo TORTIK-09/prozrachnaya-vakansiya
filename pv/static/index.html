@@ -123,7 +123,15 @@ function setReport(rep) {
   if (!vs.some(v => v.id === S.sel)) S.sel = (vs.find(v => (v.findings || []).length) || vs[0] || {}).id || null;
   render();
 }
-function render() { renderSummary(); renderFilters(); renderList(); renderDetail(); }
+function render() { renderSampleBtn(); renderSummary(); renderFilters(); renderList(); renderDetail(); }
+function renderSampleBtn() {
+  const btn = $("btnSample");
+  if (!btn) return;
+  const imported = !!(S.report && S.report.imported_source);
+  const label = imported ? "Вернуться к учебному набору" : "Проверить учебный набор";
+  if (btn.lastChild && btn.lastChild.nodeType === 3) btn.lastChild.nodeValue = label;
+  else btn.append(document.createTextNode(label));
+}
 
 function renderSummary() {
   const vs = S.report ? S.report.vacancies : [];
@@ -162,13 +170,15 @@ function renderList() {
   const vs = visible();
   if (!S.report) return $("list").replaceChildren(el("div", {class: "empty", text: S.kind === "latest" ? "Отчёта по вакансиям с портала ещё нет. Нажмите «Загрузить с портала»." : "Отчёта ещё нет. Нажмите «Проверить учебный набор»."}));
   if (!vs.length) return $("list").replaceChildren(el("div", {class: "empty", text: "Под эти условия вакансий нет"}));
+  const impIds = new Set((S.report && S.report.imported_ids) || []);
   $("list").replaceChildren(...vs.map(v => {
     const c = counts(v), n = live(v).length;
     const fresh = !LIVE.seen.has(v.id); LIVE.seen.add(v.id);
+    const impTag = impIds.has(String(v.id)) ? " · из JSON" : "";
     return el("button", {class: "item" + (fresh ? " enter" : "") + (v.pending ? " pending" : ""), "aria-current": String(v.id === S.sel), onclick: () => { S.sel = v.id; S.tab = S.tab === "resume" ? "resume" : "audit"; renderList(); renderDetail(); }},
       el("span", {class: "t", text: v.title || "(без названия)"}),
       el("span", {class: "marks"}, n === 0 ? el("span", {class: "count clean", text: "понятна"}) : Object.keys(KINDS).filter(k => c[k]).map(k => el("span", {class: "count " + k, title: KINDS[k], text: String(c[k])}))),
-      el("span", {class: "c", text: [v.company, v.id].filter(Boolean).join(" · ") + (v.pending ? " · проверяет модель" : "")}));
+      el("span", {class: "c", text: [v.company, v.id].filter(Boolean).join(" · ") + impTag + (v.pending ? " · проверяет модель" : "")}));
   }));
 }
 
@@ -316,7 +326,7 @@ function switchKind(kind, quiet) {
 $("segCheck").onclick = () => switchKind("check");
 $("segLatest").onclick = () => switchKind("latest");
 $("q").oninput = e => { S.q = e.target.value; renderList(); };
-$("btnSample").onclick = () => startJob("/api/check-sample", {method: "POST"});
+$("btnSample").onclick = () => startJob("/api/check-sample" + (S.report && S.report.imported_source ? "?restore=1" : ""), {method: "POST"});
 $("btnUpload").onclick = () => $("file").click();
 $("file").onchange = async e => { const f = e.target.files[0]; if (!f) return; const body = await f.text(); e.target.value = ""; startJob("/api/check?name=" + encodeURIComponent(f.name), {method: "POST", headers: {"Content-Type": "application/json"}, body}); };
 $("btnRun").onclick = () => startJob("/api/run?max_vacancies=" + encodeURIComponent($("maxV").value || 200), {method: "POST"});
