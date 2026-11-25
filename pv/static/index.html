@@ -353,7 +353,8 @@ function switchKind(kind, quiet) {
 $("segCheck").onclick = () => switchKind("check");
 $("segLatest").onclick = () => switchKind("latest");
 $("q").oninput = e => { S.q = e.target.value; renderList(); };
-$("btnSample").onclick = () => startJob("/api/check-sample", {method: "POST"});
+// после своего JSON кнопка возвращает сохранённый отчёт по учебному набору — мгновенно, без повторного разбора
+$("btnSample").onclick = () => startJob("/api/check-sample" + (S.report && !S.report.partial && S.report.source && S.report.source !== "sample_vacancies.json" ? "?restore=1" : ""), {method: "POST"});
 $("btnUpload").onclick = () => $("file").click();
 $("file").onchange = async e => { const f = e.target.files[0]; if (!f) return; const body = await f.text(); e.target.value = ""; startJob("/api/check?name=" + encodeURIComponent(f.name), {method: "POST", headers: {"Content-Type": "application/json"}, body}); };
 $("btnRun").onclick = () => startJob("/api/run?max_vacancies=" + encodeURIComponent($("maxV").value || 200), {method: "POST"});

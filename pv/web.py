@@ -380,6 +380,8 @@ def create_app(cfg: config_mod.Config | None = None, auto_calibrate: bool = True
             entries, stats = report.analyze_all(raw, analyzer, model, cfg.workers, None, "", cli.log, on_entry)
             rep = report.build(entries, stats, "file", src, model)
             report.write_json(cfg.reports / "check.json", rep)
+            if src == SAMPLE.name:
+                report.write_json(cfg.reports / "check-sample.json", rep)     # чтобы вернуться к нему без повторного разбора
             return rep, None
         return fn
 
@@ -427,7 +429,18 @@ def create_app(cfg: config_mod.Config | None = None, auto_calibrate: bool = True
         return progress.snapshot(max(0, since))
 
     @app.post("/api/check-sample")
-    def check_sample(background: bool = False):
+    def check_sample(background: bool = False, restore: bool = False):
+        """Проверка учебного набора. restore — вернуть сохранённый отчёт по нему, если он есть, без повторного разбора."""
+        saved = cfg.reports / "check-sample.json"
+        if restore and saved.is_file() and progress.snapshot(0).get("state") != "running":
+            try:
+                rep = json.loads(saved.read_text(encoding="utf-8"))
+            except (ValueError, OSError):
+                rep = None
+            if rep:
+                with lock:
+                    report.write_json(cfg.reports / "check.json", rep)
+                return with_verdicts(rep)
         return launch("check", SAMPLE.name, work_check(source.load_file(SAMPLE), SAMPLE.name), background)
 
     @app.post("/api/check")

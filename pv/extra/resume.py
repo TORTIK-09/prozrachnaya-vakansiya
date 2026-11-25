@@ -24,6 +24,78 @@ _STOP = {"работа", "работы", "работе", "опыт", "опыта
          "подготовка", "учёт", "учет", "базовый", "базовые", "установка", "настройка", "оформление"}
 _EDU_RANK = {"среднее": 1, "среднее профессиональное": 2, "высшее": 3}
 
+_REQ_SPLIT = re.compile(r"(?:[;\n•]+|(?<=[а-яёa-z0-9])\.\s+)", re.I)
+_REQ_SKIP = re.compile(
+    r"(?:приветствуется|желательн|преимуществ|не\s+обязател|не\s+требует|не\s+предъявля|"
+    r"без\s+опыта|остальному\s+науч|обучим|обучение\s+(?:на\s+месте|предоставля)|"
+    r"на\s+собеседован|график\s+работ|заработн\w*\s+плат|выплат\w*\s+з|условия:)",
+    re.I,
+)
+_REQ_TEXT_YEARS = re.compile(r"(?:от|не\s+менее|минимум|более)\s+(\d{1,2})\s*(?:лет|года|год)\b", re.I)
+_SOFT_OR_GENERIC_STEMS = {
+    "ответ", "актив", "внима", "аккур", "чисто", "обуча", "пункт", "добро", "комму", "дисци",
+    "стрес", "иници", "испол", "орган", "креат", "коман", "колле", "вредн", "привы", "желан",
+    "готов", "увере", "владе", "умени", "уметь", "спосо", "требу", "обяза", "необх", "должн",
+    "уровн", "профи", "специ", "образ", "высше", "средн", "класс", "стажа", "более", "менее",
+    "рабоч", "места", "месте", "своем", "людей", "сотру", "динам", "резул", "посто", "разв",
+    "также", "будет", "иметь", "налиц", "налич", "очень", "хорош", "высок", "низк", "разли",
+}
+_MAX_TEXT_GAPS = 5
+
+
+def _resume_stems(resume: dict) -> set[str]:
+    parts: list[str] = [
+        str(resume.get("desired_role") or ""),
+        str(resume.get("education_level") or ""),
+        str(resume.get("education") or ""),
+    ]
+    parts.extend(str(s) for s in resume.get("skills") or [])
+    for job in resume.get("work") or []:
+        parts.append(str(job.get("role") or ""))
+        parts.extend(str(d) for d in job.get("duties") or [])
+    return _stems(" ".join(parts))
+
+
+def _text_experience_years(fields: dict) -> int:
+    best = 0
+    for key in ("requirements", "requirement.qualification", "qualification"):
+        raw = str(fields.get(key) or "")
+        for part in _REQ_SPLIT.split(raw):
+            if _REQ_SKIP.search(part):
+                continue
+            for m in _REQ_TEXT_YEARS.finditer(part):
+                years = int(m.group(1))
+                if 1 <= years <= 30:
+                    best = max(best, years)
+    return best
+
+
+def _unconfirmed_text_requirements(fields: dict, resume_stems: set[str]) -> list[str]:
+    raw = str(fields.get("requirements") or "").strip()
+    if not raw:
+        return []
+    out: list[str] = []
+    seen: set[str] = set()
+    for part in _REQ_SPLIT.split(raw):
+        item = re.sub(r"^[\s\-–—•*]+", "", part).strip(" .;,:")
+        if len(item) < 4 or _REQ_SKIP.search(item):
+            continue
+        if _REQ_TEXT_YEARS.search(item):
+            continue
+        item_stems = {s for s in _stems(item) if s not in _SOFT_OR_GENERIC_STEMS and not s.isdigit()}
+        if not item_stems:
+            continue
+        if item_stems & resume_stems:
+            continue
+        key = item.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(f"В резюме не подтверждено требование: «{item}».")
+        if len(out) >= _MAX_TEXT_GAPS:
+            break
+    return out
+
 
 def load_resumes(path: str | Path | None = None) -> list[dict]:
     p = Path(path) if path else RESUMES_PATH
@@ -97,11 +169,15 @@ def draft(resume: dict, entry: dict) -> dict[str, Any]:
     except ValueError:
         need_years = 0
     have_years = int(resume.get("experience_years") or 0)
+    text_years = _text_experience_years(fields)
     if need_years > have_years:
         gaps.append(f"В вакансии указан опыт от {need_years} лет, в резюме — {have_years}.")
+    elif text_years > have_years:
+        gaps.append(f"В тексте вакансии указан опыт от {text_years} лет, в резюме — {have_years}.")
     need_edu, have_edu = str(fields.get("requirement.education", "")), str(resume.get("education_level", ""))
     if _edu_rank(need_edu) > _edu_rank(have_edu):
         gaps.append(f"В вакансии указано образование «{need_edu}», в резюме — «{have_edu}».")
+    gaps.extend(_unconfirmed_text_requirements(fields, _resume_stems(resume)))
 
     findings = entry.get("findings") or []
     questions = _questions(findings)

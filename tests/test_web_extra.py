@@ -47,6 +47,30 @@ def test_upload(client):
     assert c.post("/api/check", content='{"что-то": 1}').status_code == 422
 
 
+def test_upload_report_has_only_uploaded_vacancies_and_sample_returns_without_reanalysis(tmp_path, monkeypatch):
+    """Отчёт по своему JSON содержит только переданные вакансии; возврат к учебному набору — из сохранённого отчёта."""
+    calls = []
+
+    def analyzer(v, llm=None):
+        calls.append(v.id)
+        return []
+
+    monkeypatch.setattr(cli, "get_analyzer", lambda: (analyzer, "t"))
+    monkeypatch.setattr(cli, "make_llm", lambda c, enabled: None)
+    monkeypatch.setattr(cli, "log", lambda m: None)
+    cfg = config.Config(reports_dir=str(tmp_path / "reports"))
+    c = TestClient(web.create_app(cfg, auto_calibrate=False), base_url="http://127.0.0.1:8085")
+    assert len(c.post("/api/check-sample").json()["vacancies"]) == 10 and len(calls) == 10
+    body = json.dumps({"results": {"vacancies": [{"vacancy": {"id": "IMP-1", "job-name": "Сторож"}}]}})
+    rep = c.post("/api/check?name=first.json", content=body, headers={"content-type": "application/json"}).json()
+    assert [v["id"] for v in rep["vacancies"]] == ["IMP-1"] and rep["source"] == "first.json"      # учебные не подмешиваются
+    back = c.post("/api/check-sample?restore=1").json()
+    assert len(back["vacancies"]) == 10 and back["source"] == "sample_vacancies.json" and len(calls) == 11   # без повторного разбора
+    assert len(c.get("/api/report?kind=check").json()["vacancies"]) == 10
+    c.post("/api/check-sample")                       # без restore — честная повторная проверка
+    assert len(calls) == 21
+
+
 def test_foreign_host_and_origin_rejected(client):
     c, _ = client
     assert c.get("/api/status", headers={"host": "evil.example"}).status_code == 403
@@ -144,3 +168,39 @@ def test_human_verdict_on_disagreement(client):
     # сам файл отчёта решения человека не меняют
     import json as _json
     assert "verdict" not in (cfg.reports / "check.json").read_text(encoding="utf-8")
+
+
+def test_sample_resume_draft_is_fresh_and_has_no_invented_facts():
+    sample_path = config.ROOT / "examples" / "sample_resume_draft.json"
+    assert sample_path.is_file()
+    saved = json.loads(sample_path.read_text(encoding="utf-8"))
+    rep = json.loads((config.ROOT / "examples" / "sample_report.json").read_text(encoding="utf-8"))
+    res = next(r for r in resume_mod.load_resumes() if r["id"] == saved["resume_id"])
+    vac = next(v for v in rep["vacancies"] if str(v["id"]) == str(saved["vacancy"]["id"]))
+    assert saved == resume_mod.draft(res, vac)
+    assert resume_mod.invented(saved, res) == []
+
+
+def test_not_confirmed_checks_text_requirements_and_text_experience():
+    rep = json.loads((config.ROOT / "examples" / "sample_report.json").read_text(encoding="utf-8"))
+    by_id = {v["id"]: v for v in rep["vacancies"]}
+    resumes = {r["id"]: r for r in resume_mod.load_resumes()}
+
+    # подходящие кандидаты не получают ложных пробелов по своим навыкам
+    assert resume_mod.draft(resumes["RES-01"], by_id["DEMO-39-001"])["not_confirmed"] == []
+    assert resume_mod.draft(resumes["RES-02"], by_id["DEMO-39-007"])["not_confirmed"] == []
+
+    # неподходящий кандидат получает конкретные неподтверждённые навыки из текста
+    gaps_01_07 = resume_mod.draft(resumes["RES-01"], by_id["DEMO-39-007"])["not_confirmed"]
+    assert any("Windows" in g for g in gaps_01_07)
+
+    # опыт из текста (5 лет при 0 в поле) и SQL попадают в not_confirmed
+    gaps_02_03 = resume_mod.draft(resumes["RES-02"], by_id["DEMO-39-003"])["not_confirmed"]
+    assert any("5 лет" in g for g in gaps_02_03)
+    assert any("SQL" in g for g in gaps_02_03)
+
+    # общие личные качества и «приветствуется» не считаются неподтверждёнными требованиями
+    assert resume_mod.draft(resumes["RES-03"], by_id["DEMO-39-002"])["not_confirmed"] == []
+    assert resume_mod.draft(resumes["RES-03"], by_id["DEMO-39-006"])["not_confirmed"] == []
+
+
