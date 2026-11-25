@@ -359,3 +359,17 @@ def test_field_against_free_text_mismatches():
     assert ("requirements", "ambiguous") in kinds(vac(requirement=blank, requirements="Стандартный набор компетенций."))
     assert ("duties", "ambiguous") in kinds(vac(duty="Обеспечение эффективного функционирования процессов подразделения и достижение поставленных целей."))
     assert ("duties", "ambiguous") not in kinds(vac(duty="Обеспечение работы серверов и локальной сети, резервное копирование."))
+
+
+def test_findings_from_manual_review_of_live_vacancies():
+    """Ошибки анализатора, найденные ручным просмотром живых вакансий (eval/review.md), по их ID."""
+    live = {v.id[:8]: v for v in map(normalize, source.load_file("eval/real_sample.json")) if v}
+    has = lambda pre, pair: pair in [(f.topic, f.kind) for f in rules.check(live[pre])]
+    for pre in ("7a87d788", "333e4e78", "91bee905", "4fc6ae38"):       # «Сменная работа» + заглушка в поле смен
+        assert has(pre, ("schedule", "ambiguous")), pre
+    for pre in ("703115d8", "84f7e108"):                                # год и больше в поле, «от 6 мес.» в тексте
+        assert has(pre, ("requirements", "contradiction")), pre
+    for pre in ("03996648", "0746da88"):                                # опыт в поле, «без требований к стажу» в тексте
+        assert has(pre, ("requirements", "contradiction")), pre
+    for pre in ("6ec382b4", "78be3694"):                                # требования записаны в обязанностях — не пропуск
+        assert not has(pre, ("requirements", "missing")), pre

@@ -74,7 +74,14 @@ JUNIOR_TITLE = re.compile(r"стаж[её]р|ученик|младш\w+|помо
 SENIOR_TITLE = re.compile(r"ведущ\w+|главн\w+|старш\w+|руководител\w+|начальник\w*|заведующ\w+|директор\w*|"
                           r"заместител\w+|управляющ\w+", I)
 ALTERNATIVE = re.compile(r"\bили\b|\bлибо\b", I)
-NO_EXP = re.compile(r"без\s+опыта(?:\s+работы)?|опыт\w*(?:\s+работы)?\s+не\s+(?:требуется|обязателен|нужен)", I)
+NO_EXP = re.compile(r"без\s+опыта(?:\s+работы)?|опыт\w*(?:\s+работы)?\s+не\s+(?:требуется|обязателен|нужен)|"
+                    r"без\s+предъявления\s+требований\s+к\s+(?:стажу|опыту)(?:\s+работы)?", I)
+# опыт меньше года в тексте при годе и больше в поле: «от 6 мес.», «не менее полугода»
+EXP_MONTHS = re.compile(r"(?:опыт\w*(?:\s+работы)?[^.;]{0,30}?|стаж\w*[^.;]{0,30}?)?(?:от|не\s+менее)\s+"
+                        r"(?:(?:[1-9]|1[01])\s*(?:-?х\s+)?мес\w*\.?|полугода|полгода)", I)
+# требования бывают записаны в описании обязанностей отдельным блоком
+REQ_IN_DUTY = re.compile(r"от\s+вас|требовани\w+\s*:|опыт\w*(?:\s+работы)?\s+не\s+треб\w+|обучим|научим|"
+                         r"образовани\w+\s*:|что\s+мы\s+ждем|мы\s+ожидаем", I)
 
 HARD_SKILL = re.compile(
     r"требовани|знани|знать|уметь|аккредитац|лиценз|специальност|професси|владени|навык|опыт|образовани|умени|\bпк\b|"
@@ -122,7 +129,7 @@ ABSTRACT = re.compile(
     r"реализаци\w*|взаимодействи\w*|деятельност\w*|подразделени\w*|участи\w*|задач\w*|организаци\w*\s+работ\w*|"
     r"выполнени\w*|функци\w*|смежн\w*|отдел\w*|компани\w*|развити\w*|стратеги\w*|результат\w*", I)
 _CONTENT_WORD = re.compile(r"[а-яёa-z]{4,}", I)
-_EDU_LEVEL = (("высш", 3), ("средн\w+\s+профессиональн", 2), ("средн", 1), ("общее", 1), ("основное", 1))
+_EDU_LEVEL = (("высш", 3), (r"средн\w+\s+профессиональн", 2), ("средн", 1), ("общее", 1), ("основное", 1))
 
 _LOOKALIKE = str.maketrans("aAcCeEoOpPxXyHKMTB", "аАсСеЕоОрРхХуНКМТВ")
 _SENTENCE_END = ".;!?\n"
@@ -286,6 +293,13 @@ def _requirements(v: Vacancy) -> list[Finding]:
             out.extend(_zero_experience(v))
     elif exp is not None and exp >= 1:
         hit = _first(v, REQ_FIELDS, NO_EXP)
+        months = None if hit else _first(v, REQ_FIELDS, EXP_MONTHS)
+        if months:
+            out.append(Finding(
+                "requirements", "contradiction", "requirement.experience", str(exp),
+                f"В поле опыта указано {exp}, а в тексте достаточно опыта меньше года.",
+                "Уточните у работодателя, какой опыт работы действительно обязателен, и приведите поле и текст к одному значению.",
+                conflict_with=Evidence(months[0], months[1])))
         if hit:
             out.append(Finding(
                 "requirements", "contradiction", "requirement.experience", str(exp),
@@ -313,7 +327,7 @@ def _requirements(v: Vacancy) -> list[Finding]:
         return out
 
     if not any(texts):
-        if _nothing(v.education):
+        if _nothing(v.education) and not REQ_IN_DUTY.search(norm(v.duty or "")):
             out.append(Finding("requirements", "missing", "requirements", "",
                                "Требования к кандидату не указаны: нет ни уровня образования, ни навыков, ни квалификации.",
                                "Уточните у работодателя требования к образованию, навыкам и квалификации кандидата."))
@@ -391,7 +405,9 @@ def _schedule(v: Vacancy) -> list[Finding]:
         return []
     shift = search(SHIFT, v.schedule)
     if shift:
-        if not (_has(v, SCHEDULE_FIELDS, SHIFT_SCHEME) or v.shifts) or not (has_time or v.shifts):
+        # поле смен портала часто содержит заглушку («По графику сменности»): она не говорит ни о схеме, ни о часах
+        told = any(TIME_RANGE.search(x) or SHIFT_SCHEME.search(x) for x in v.shifts)
+        if not (_has(v, SCHEDULE_FIELDS, SHIFT_SCHEME) or told) or not (has_time or told):
             return [Finding("schedule", "ambiguous", "schedule", shift,
                             "Указан сменный график без схемы чередования смен и времени их начала и окончания.",
                             "Уточните у работодателя схему смен (сколько рабочих и выходных дней подряд) и время начала и окончания смены.")]
