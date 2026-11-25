@@ -101,11 +101,15 @@ function renderSettings() {
     needKey ? setEl("label", {class: "field wide"}, "Ключ API", setEl("input", {type: "password", id: "setKey", autocomplete: "off", placeholder: saved.has_api_key && sameKind ? "сохранён — оставьте пустым, чтобы не менять" : "ключ провайдера"})) : null,
     needKey ? setEl("div", {class: "note", text: "Ключ хранится только на этом компьютере, в папке reports. При работе через API тексты вакансий и методика проверки передаются провайдеру."}) : null);
 
-  putKids(box, 
-    setEl("h3", {text: "Настройки ИИ"}),
+  putKids(box,
+    setEl("div", {class: "settings-head"},
+      setEl("div", {},
+        setEl("h3", {text: "Настройки ИИ"}),
+        setEl("p", {text: "Выберите режим работы, бюджет времени калибровки и модель ИИ."})),
+      setEl("button", {type: "button", class: "icon-btn", title: "Закрыть", "aria-label": "Закрыть", onclick: () => toggleSettings(false), text: "✕"})),
     d.env_locked ? setEl("div", {class: "strength weak", text: "Модель задана переменными окружения PV_LLM_… — они важнее выбора в этой форме."}) : null,
     modeList, calib, provider,
-    setEl("div", {class: "set-actions"}, setEl("button", {class: "btn primary", id: "setSave", onclick: saveSettings, text: "Сохранить"}), setEl("button", {class: "btn", onclick: recalibrate, disabled: SET.data.mode === "rules_only", title: "Заново проверить подключённую модель на размеченных вакансиях", text: "Перекалибровать ИИ"}), setEl("button", {class: "btn", onclick: () => toggleSettings(false), text: "Закрыть"}), setEl("span", {class: "note", id: "setMsg"})));
+    setEl("div", {class: "set-actions"}, setEl("button", {class: "btn primary", id: "setSave", onclick: saveSettings, text: "Сохранить"}), setEl("button", {class: "btn", onclick: recalibrate, disabled: SET.data.mode === "rules_only", title: "Заново проверить подключённую модель на размеченных вакансиях", text: "Перекалибровать ИИ"}), setEl("span", {class: "note", id: "setMsg"}), setEl("button", {class: "btn", onclick: () => toggleSettings(false), text: "Закрыть"})));
   previewPlan();
 }
 

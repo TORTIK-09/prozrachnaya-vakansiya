@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Статистика — Прозрачная вакансия</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23173a3a'/%3E%3Ccircle cx='14' cy='14' r='6.5' fill='none' stroke='%23f2b441' stroke-width='2.6'/%3E%3Cpath d='m19 19 6 6' stroke='%23f4efe4' stroke-width='2.8' stroke-linecap='round'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="/static/app.css?v=13">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230d1726'/%3E%3Ccircle cx='14' cy='14' r='6.5' fill='none' stroke='%23f59e0b' stroke-width='2.6'/%3E%3Cpath d='m19 19 6 6' stroke='%23f8fafc' stroke-width='2.8' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/app.css?v=14">
 <style>
 .page { max-width: 1120px; margin: 0 auto; padding: 22px 24px 40px; display: grid; gap: 16px; }
 .lead h2 { margin: 0 0 6px; font-size: 26px; letter-spacing: -.02em; }
@@ -47,30 +47,93 @@ details ul { margin: 8px 0 0; padding-left: 20px; font-size: 13.5px; } details l
 </style>
 </head>
 <body>
-<header class="top">
-  <div class="logo">
-    <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="14" cy="14" r="7.5" fill="none" stroke="#f2b441" stroke-width="2.6"/><path d="m19.5 19.5 7 7" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/><path d="M10.5 14h7M10.5 11h4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" opacity=".8"/></svg>
-    <div><h1>Прозрачная вакансия</h1><p>Насколько понятно описаны условия работы · Калининградская область</p></div>
-  </div>
-  <nav class="nav" aria-label="Разделы"><a href="/">Отчёт</a><a href="/stats" aria-current="page">Статистика</a></nav>
-  <span class="chip" id="modelChip"><i></i><span>модель: проверяю…</span></span>
-  <button class="icon-btn" id="themeBtn" title="Светлая или тёмная тема" aria-label="Сменить тему">◐</button>
-</header>
-<div class="strength weak page-note" id="weakNote" hidden></div>
-<div class="notice" id="calib" role="status"><span class="spin"></span><div class="body"><b id="calibTitle"></b><span class="sub" id="calibSub"></span><div class="bar2"><u id="calibBar" style="width:0"></u></div></div><button class="btn" id="calibClose" hidden>Закрыть</button></div>
+<div class="sb-backdrop" id="sbBackdrop" onclick="toggleSidebar(false)"></div>
+<div class="app-shell">
+  <aside class="sidebar" id="sidebar" aria-label="Навигация">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <a class="sb-brand" href="/">
+        <span class="sb-brand-ico" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>
+        </span>
+        <span class="sb-brand-title">прозрачная<br>вакансия<span>.</span></span>
+      </a>
+      <button type="button" class="sb-close" aria-label="Закрыть меню" onclick="toggleSidebar(false)">✕</button>
+    </div>
+    <div class="sb-workspace">
+      <span class="sb-ws-badge">К</span>
+      <div class="sb-ws-meta">
+        <b>Рабочее пространство</b>
+        <small>Калининградская область</small>
+      </div>
+    </div>
+    <div class="sb-label">Ваш поиск работы</div>
+    <nav class="sb-nav" aria-label="Основные разделы">
+      <a class="sb-link" href="/">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+        <span>Отчёт по вакансиям</span>
+      </a>
+      <a class="sb-link" href="/?tab=resume">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h5"/></svg>
+        <span>Резюме под вакансию</span>
+      </a>
+      <a class="sb-link active" href="/stats" aria-current="page">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10"/><path d="M12 20V4"/><path d="M20 20v-7"/></svg>
+        <span>Статистика</span>
+      </a>
+      <a class="sb-link" href="/?tab=how">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+        <span>Как это работает</span>
+      </a>
+    </nav>
+    <div class="sb-promo">
+      <span class="sb-promo-ico" aria-hidden="true">✦</span>
+      <b>Анализ с вниманием к каждой детали</b>
+      <p>Системный AI и языковая модель помогают увидеть то, что скрыто между строк.</p>
+      <a href="/?tab=how" style="color:var(--accent);font-size:12.5px;font-weight:600;text-decoration:none;">Как это работает →</a>
+    </div>
+    <div class="sb-foot">
+      <button type="button" class="sb-link" onclick="toggleSettings()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3"/><path d="M12 18v3"/><path d="m4.93 4.93 2.12 2.12"/><path d="m16.95 16.95 2.12 2.12"/><path d="M3 12h3"/><path d="M18 12h3"/><circle cx="12" cy="12" r="3.5"/></svg>
+        <span>Настройки ИИ</span>
+      </button>
+      <a class="sb-link" href="/?tab=help">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+        <span>Помощь и документация</span>
+      </a>
+    </div>
+  </aside>
 
-<main class="page" id="page">
-  <section class="lead">
-    <h2>Что находит Системный AI, что — модель и что — вместе</h2>
-    <p>Один и тот же набор размеченных вакансий разобран тремя способами. По каждой вакансии заранее записано, какие замечания должны быть найдены, поэтому способы можно сравнить числами, а не на глаз.</p>
-  </section>
-  <section class="ways">
-    <div class="way"><b><i class="c-rules"></i>Только Системный AI</b><span>Так в сервисе называется встроенный алгоритм на правилах: проверки полей и шаблоны формулировок. Это не нейросеть: работает без модели, мгновенно, всегда одинаково.</span></div>
-    <div class="way"><b><i class="c-llm"></i>Только модель</b><span>Языковая модель разбирает вакансию сама. Её цитаты сверяются с текстом вакансии, выдуманные отбрасываются.</span></div>
-    <div class="way"><b><i class="c-both"></i>Вместе</b><span>Замечания Системного AI принимаются как есть, модель добавляет то, чего Системный AI не нашёл. Так сервис работает в отчёте.</span></div>
-  </section>
-  <div id="out"><div class="box muted">Загружаю…</div></div>
-</main>
+  <div class="main-area">
+    <header class="top">
+      <button type="button" class="icon-btn menu-btn" aria-label="Открыть меню" onclick="toggleSidebar(true)">☰</button>
+      <div class="crumbs">
+        <span>Рабочая панель</span>
+        <span>/</span>
+        <b>Статистика</b>
+      </div>
+      <span class="top-loc">📍 Калининградская область</span>
+      <span class="chip" id="modelChip"><i></i><span>модель: проверяю…</span></span>
+      <button class="icon-btn" id="themeBtn" title="Светлая или тёмная тема" aria-label="Сменить тему">◐</button>
+      <a class="icon-btn" title="Помощь и документация" aria-label="Помощь" href="/?tab=help" style="text-decoration:none;">?</a>
+    </header>
+    <dialog class="settings" id="settings" aria-label="Настройки ИИ"></dialog>
+    <div class="strength weak page-note" id="weakNote" hidden></div>
+    <div class="notice" id="calib" role="status"><span class="spin"></span><div class="body"><b id="calibTitle"></b><span class="sub" id="calibSub"></span><div class="bar2"><u id="calibBar" style="width:0"></u></div></div><button class="btn" id="calibClose" hidden>Закрыть</button></div>
+
+    <main class="page" id="page">
+      <section class="lead">
+        <h2>Что находит Системный AI, что — модель и что — вместе</h2>
+        <p>Один и тот же набор размеченных вакансий разобран тремя способами. По каждой вакансии заранее записано, какие замечания должны быть найдены, поэтому способы можно сравнить числами, а не на глаз.</p>
+      </section>
+      <section class="ways">
+        <div class="way"><b><i class="c-rules"></i>Только Системный AI</b><span>Так в сервисе называется встроенный алгоритм на правилах: проверки полей и шаблоны формулировок. Это не нейросеть: работает без модели, мгновенно, всегда одинаково.</span></div>
+        <div class="way"><b><i class="c-llm"></i>Только модель</b><span>Языковая модель разбирает вакансию сама. Её цитаты сверяются с текстом вакансии, выдуманные отбрасываются.</span></div>
+        <div class="way"><b><i class="c-both"></i>Вместе</b><span>Замечания Системного AI принимаются как есть, модель добавляет то, чего Системный AI не нашёл. Так сервис работает в отчёте.</span></div>
+      </section>
+      <div id="out"><div class="box muted">Загружаю…</div></div>
+    </main>
+  </div>
+</div>
 
 <script src="/static/settings.js?v=3"></script>
 <script src="/static/calib.js?v=6"></script>
@@ -80,6 +143,13 @@ const TOPICS = {title: "Название должности", duties: "Обяз�
 const KINDS = {contradiction: "противоречие", ambiguous: "неоднозначность", missing: "пропуск"};
 const MODES = [["rules", "Только Системный AI", "c-rules"], ["llm", "Только модель", "c-llm"], ["both_raw", "Вместе, до калибровки ИИ", "c-both"], ["both", "Вместе, после калибровки", "c-both"]];
 const $ = id => document.getElementById(id);
+function toggleSidebar(force) {
+  const sb = $("sidebar"), bd = $("sbBackdrop");
+  if (!sb || !bd) return;
+  const open = force === undefined ? !sb.classList.contains("open") : force;
+  sb.classList.toggle("open", open);
+  bd.classList.toggle("show", open);
+}
 function el(tag, attrs, ...kids) {
   const n = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs || {})) {

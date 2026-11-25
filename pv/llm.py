@@ -341,11 +341,25 @@ def _ensure_ollama_running(llm: ChatLLM) -> list[str] | None:
     return None
 
 
+_LOCAL_MODELS_CACHE: dict[str, Any] = {"ts": 0.0, "base_url": "", "models": []}
+
+
 def list_local_models(base_url: str = OLLAMA_URL) -> list[str]:
-    """Возвращает список установленных локальных моделей (автоматически запуская Ollama при необходимости)."""
-    probe = ChatLLM(base_url, DEFAULT_MODEL)
-    models = _ensure_ollama_running(probe)
-    return models or []
+    """Возвращает список установленных локальных моделей (с коротким кэшем 30 с, без блокировки интерфейса)."""
+    now_t = time.monotonic()
+    if _LOCAL_MODELS_CACHE["base_url"] == base_url and (now_t - _LOCAL_MODELS_CACHE["ts"]) < 30.0:
+        return list(_LOCAL_MODELS_CACHE["models"])
+    probe = ChatLLM(base_url, DEFAULT_MODEL, timeout=2.5)
+    models: list[str] = []
+    try:
+        r = probe._client.get(f"{probe.base_url}/models", headers=probe._headers(), timeout=2.0)
+        if r.status_code == 200:
+            data = r.json().get("data") or []
+            models = [m.get("id", "") for m in data if isinstance(m, dict) and m.get("id")]
+    except (httpx.HTTPError, ValueError):
+        models = []
+    _LOCAL_MODELS_CACHE.update(ts=now_t, base_url=base_url, models=models)
+    return list(models)
 
 
 def settings_path(reports_dir: Path) -> Path:
