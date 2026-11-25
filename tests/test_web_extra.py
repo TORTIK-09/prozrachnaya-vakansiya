@@ -138,3 +138,15 @@ def test_human_verdict_on_disagreement(client):
     # сам файл отчёта решения человека не меняют
     import json as _json
     assert "verdict" not in (cfg.reports / "check.json").read_text(encoding="utf-8")
+
+
+def test_sample_resume_draft_is_fresh_and_has_no_invented_facts():
+    sample_path = config.ROOT / "examples" / "sample_resume_draft.json"
+    assert sample_path.is_file()
+    saved = json.loads(sample_path.read_text(encoding="utf-8"))
+    rep = json.loads((config.ROOT / "examples" / "sample_report.json").read_text(encoding="utf-8"))
+    res = next(r for r in resume_mod.load_resumes() if r["id"] == saved["resume_id"])
+    vac = next(v for v in rep["vacancies"] if str(v["id"]) == str(saved["vacancy"]["id"]))
+    assert saved == resume_mod.draft(res, vac)
+    assert resume_mod.invented(saved, res) == []
+
