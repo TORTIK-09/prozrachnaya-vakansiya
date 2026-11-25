@@ -109,9 +109,44 @@ def create_app(cfg: config_mod.Config | None = None, auto_calibrate: bool = True
                     "shipped": bool(prof.get("_shipped")), "blocked": len(prof.get("blocked", []))}
         if auto_calibrate:
             pl = plan()
-            job.start(model, limit=pl["llm_target_tests"], learn_seconds=pl["effective_minutes"] * 60.0, cfg=cfg)
+            start_calibration_job(model, pl)
             return job.status()
         return {"state": "needed", "model": model.describe()}
+
+    def start_calibration_job(model, pl: dict) -> None:
+        """Калибровка по плану: скорость меряется на первых двух вакансиях, дальше — сколько поместится во время."""
+        budget = pl["effective_minutes"] * 60.0
+        job.start(model, limit=min(pl["anti_template_cap"], pl["available_tests"]), learn_seconds=budget, cfg=cfg,
+                  budget_seconds=budget, min_tests=min(pl["min_tests"], pl["available_tests"]))
+
+    def modes_table() -> list[dict]:
+        """Показатели пяти режимов. Числа есть только у режимов, в которых модель действительно калибровалась."""
+        def total(sets: list[dict], mode_key: str) -> dict | None:
+            rows = [s["modes"][mode_key] for s in sets if mode_key in s.get("modes", {})]
+            if not rows:
+                return None
+            return {"found": sum(r["must_found"] for r in rows), "must": sum(r["must_total"] for r in rows),
+                    "extra": sum(r["extra_total"] for r in rows), "vacancies": sum(r["vacancies"] for r in rows)}
+
+        base = calibrate.rules_only()
+        out = [{"mode": "rules_only", "model": None, "seconds": base["seconds_per_vacancy"]["rules"],
+                **(total(base["sets"], "rules") or {})}]
+        by_kind: dict[str, dict] = {}
+        for prof in profile.every(cfg.reports):
+            kind = prof["model"].get("kind") or ("local" if prof["model"].get("provider") in ("ollama", "local") else "custom_api")
+            cur = by_kind.get(kind)
+            if cur is None or (prof.get("calibrated_at") or "") > (cur.get("calibrated_at") or ""):
+                by_kind[kind] = prof
+        for kind in ("local", "custom_api"):
+            prof = by_kind.get(kind)
+            for mode_name, key in ((kind, "both"), (kind + "_only", "llm")):
+                row = {"mode": mode_name, "model": prof["model"].get("model") if prof else None}
+                if prof:
+                    row.update(total(prof["sets"], key) or {})
+                    row["seconds"] = (prof.get("seconds_per_vacancy") or {}).get("llm")
+                    row["calibrated_at"] = prof.get("calibrated_at")
+                out.append(row)
+        return out
 
     MODES = ("rules_only", "local", "local_only", "custom_api", "custom_api_only")
 
@@ -133,7 +168,8 @@ def create_app(cfg: config_mod.Config | None = None, auto_calibrate: bool = True
         info = model.describe()
         key = (info.get("base_url"), info.get("model"))
         if state.get("meta_key") != key:
-            state["meta"] = llm_mod.detect_model_parameters(str(info.get("model") or ""), str(info.get("base_url") or ""))
+            found = llm_mod.detect_model_parameters(str(info.get("model") or ""), str(info.get("base_url") or ""))
+            state["meta"] = llm_mod.remember_model(cfg.reports, found)
             state["meta_key"] = key
         return state["meta"]
 
@@ -294,7 +330,7 @@ def create_app(cfg: config_mod.Config | None = None, auto_calibrate: bool = True
         model = llm()
         if model is None:
             raise HTTPException(409, "Модель не подключена")
-        job.start(model)
+        start_calibration_job(model, plan())
         return job.status()
 
     @app.get("/api/stats")
@@ -305,7 +341,8 @@ def create_app(cfg: config_mod.Config | None = None, auto_calibrate: bool = True
         saved = verdicts().values()
         human = {"rule": sum(1 for x in saved if x.get("choice") == "rule"),
                  "llm": sum(1 for x in saved if x.get("choice") == "llm")}
-        return {"stats": data, "calibration": with_context(calibration()), "verdicts": human, "mode": mode(), "meta": meta()}
+        return {"stats": data, "calibration": with_context(calibration()), "verdicts": human, "mode": mode(), "meta": meta(),
+                "modes": modes_table()}
 
     @app.get("/api/report")
     def get_report(kind: str = "check"):

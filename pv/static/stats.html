@@ -156,6 +156,17 @@ function render(d, calib) {
     el("p", {class: "about", text: mode === "rules_only" ? "Отчёт собирает один Системный AI. Ниже — его показатели; строки модели появятся, когда модель будет подключена и откалибрована." : "В таблицах ниже строка этого режима выделена. Все числа измерены на этой модели и этом компьютере при калибровке — ничего не оценивается заочно: режим, в котором модель не запускалась, показателей не имеет."}),
     strengthNote(window.__meta)));
   window.__active = d.model ? ACTIVE : "rules";
+  const rows5 = (window.__modes || []).map(r => el("tr", {class: r.mode === mode ? "active-mode" : ""},
+    el("td", {}, r.mode === mode ? el("span", {class: "on", style: "margin-right:8px", text: "текущий"}) : null, ((typeof MODE_NAMES !== "undefined" && MODE_NAMES[r.mode]) || [r.mode])[0]),
+    el("td", {class: r.model ? "" : "muted", text: r.mode === "rules_only" ? "—" : (r.model || "модель не подключалась")}),
+    r.must === undefined ? el("td", {class: "muted", colspan: "4", text: "не измерялось: в этом режиме модель ещё не калибровалась"}) : [
+      el("td", {class: "n", text: r.found + " из " + r.must}),
+      el("td", {class: "n" + (r.extra ? " bad" : " good"), text: String(r.extra)}),
+      el("td", {class: "n", text: String(r.vacancies)}),
+      el("td", {class: "n", text: r.seconds === null || r.seconds === undefined ? "—" : (r.seconds < 1 ? num(r.seconds * 1000, 1) + " мс" : num(r.seconds, 1) + " с")})]));
+  out.push(el("section", {class: "box"}, el("h3", {text: "Пять режимов работы"}),
+    el("p", {class: "about", text: "По одной строке на режим. Числа — сумма по всем размеченным наборам. У режима есть показатели, только если модель в нём действительно калибровалась на этом компьютере (или её профиль поставляется с проектом); заочных оценок нет."}),
+    el("div", {class: "scroll"}, el("table", {}, el("thead", {}, el("tr", {}, el("th", {text: "Режим"}), el("th", {text: "Модель"}), el("th", {class: "n", text: "Найдено обязательных"}), el("th", {class: "n", text: "Лишних"}), el("th", {class: "n", text: "Вакансий"}), el("th", {class: "n", text: "На вакансию"}))), el("tbody", {}, rows5)))));
   out.push(el("section", {class: "box verdict"}, el("h3", {text: "Что показывают числа"}), el("ul", {}, verdict(d).map(t => el("li", {text: t})))));
   for (const st of d.sets) out.push(setTable(st));
   if (d.model) {
@@ -166,6 +177,7 @@ function render(d, calib) {
       el("section", {class: "box"}, el("h3", {text: "Калибровка ИИ"}), el("p", {class: "about", text: "Сервис сверил ответы модели с разметкой и отключил виды замечаний, в которых она ошибается чаще, чем попадает. Веса модели не менялись: меняется то, какую часть её ответа сервис пускает в отчёт."}),
         d.categories.length ? el("div", {class: "scroll"}, el("table", {}, el("thead", {}, el("tr", {}, el("th", {text: "Вид замечаний модели"}), el("th", {class: "n", text: "Верных"}), el("th", {class: "n", text: "Лишних"}), el("th", {text: ""}))),
           el("tbody", {}, d.categories.map(c => el("tr", {}, el("td", {text: pairName([c.topic, c.kind])}), el("td", {class: "n", text: String(c.ok)}), el("td", {class: "n", text: String(c.extra)}), el("td", {}, el("span", {class: c.blocked ? "off" : "on", text: c.blocked ? "отключён" : "оставлен"}))))))) : el("div", {class: "muted", text: "Сверх Системного AI модель не предложила ни одного замечания."}),
+        d.template ? el("p", {class: "about" + (d.template.templated ? " bad" : ""), style: "margin-top:10px", text: (d.template.templated ? "Модель отвечает шаблонно: " : "Признак шаблонных ответов: ") + "на самый частый вид приходится " + pct(d.template.top_kind_share) + " её замечаний, на понятную вакансию — в среднем " + num(d.template.on_clean_per_vacancy, 1) + " замечания. Примеров с замечаниями в запросе: " + d.examples_in_prompt + " (для небольших моделей — ноль: они копируют примеры)."}) : null,
         d.errors ? el("p", {class: "about", style: "margin-top:10px", text: "Запросов без ответа модели: " + d.errors + " из " + d.vacancies + "."}) : null)));
   }
   const h = window.__verdicts || {rule: 0, llm: 0};
@@ -187,7 +199,7 @@ function render(d, calib) {
 async function load() {
   try {
     const r = await fetch("/api/stats"); const data = await r.json();
-    window.__verdicts = data.verdicts; window.__mode = data.mode; window.__meta = data.meta;
+    window.__verdicts = data.verdicts; window.__mode = data.mode; window.__meta = data.meta; window.__modes = data.modes;
     render(data.stats, data.calibration);
   } catch (e) { $("out").replaceChildren(el("div", {class: "box", text: "Не удалось загрузить статистику: " + e.message})); }
 }

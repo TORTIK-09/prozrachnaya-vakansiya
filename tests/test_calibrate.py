@@ -237,3 +237,46 @@ def test_ai_only_mode_skips_system_ai(monkeypatch):
     v = normalize({"id": "K", "job-name": "Водитель автомобиля", "duty": "Ведение бухгалтерского учёта, сверка расчётов.",
                    "schedule": "Гибкий график", "requirement": {"experience": 1}})
     assert {(f.topic, f.source) for f in analyze(v, llm)} == {("title", "llm")}
+
+
+def test_budget_measures_speed_then_fits_time():
+    llm = Fake()
+    r = calibrate.run(llm, budget_seconds=0.0001, min_tests=7)        # времени нет совсем — берётся минимум
+    assert r["vacancies"] == 7 and llm.calls == 7
+    assert sum(s["modes"]["rules"]["vacancies"] for s in r["sets"]) == 7 and len(r["sets"]) == 3
+    r = calibrate.run(Fake(), budget_seconds=3600, min_tests=5, limit=12)   # времени много — упирается в потолок
+    assert r["vacancies"] == 12
+    assert set(r["template"]) == {"findings", "top_kind_share", "on_clean_per_vacancy", "templated"} and r["examples_in_prompt"] == 0
+
+
+def test_prompt_examples_depend_on_model_strength():
+    from pv.analyze import ai
+
+    class M:
+        def __init__(self, s): self.strength = s
+    weak, mid, strong = (ai.system_prompt(M(x)) for x in ("weak", "medium", "strong"))
+    assert "Продавец-кассир" not in weak and "Продавец-кассир" in mid and "Специалист отдела сопровождения" not in mid
+    assert "Специалист отдела сопровождения" in strong and "{examples}" not in weak + mid + strong
+    assert ai.system_prompt(None) == weak          # неизвестная модель — как слабая
+
+
+def test_five_modes_table_has_numbers_only_for_calibrated_modes(tmp_path, monkeypatch):
+    c = client_with(Fake(), tmp_path, monkeypatch)
+    c.get("/api/calibration"); wait_done(c)
+    rows = {r["mode"]: r for r in c.get("/api/stats").json()["modes"]}
+    assert list(rows) == ["rules_only", "local", "local_only", "custom_api", "custom_api_only"]
+    assert rows["rules_only"]["found"] == 27 and rows["rules_only"]["extra"] == 0
+    # подставная модель не локальная: её числа — в строках «по API», а локальные режимы не измерялись
+    assert rows["custom_api"]["model"] == "fake-1" and rows["custom_api"]["found"] >= rows["custom_api_only"]["found"]
+    # локальная строка — из профиля, поставляемого с проектом, если он есть; иначе «не измерялось»
+    assert rows["local"]["model"] in (None, "qwen2.5:3b") and ("found" in rows["local"]) == (rows["local"]["model"] is not None)
+
+
+def test_unknown_model_is_remembered_in_local_table(tmp_path):
+    from pv import llm as llm_mod
+    seen = llm_mod.remember_model(tmp_path, {"model": "Mystery", "strength": "medium", "params_b": 20.0, "params_label": "~20", "detection_method": "ollama_api_show"})
+    assert seen["strength"] == "medium" and "mystery" in llm_mod.load_known_models(tmp_path)
+    again = llm_mod.remember_model(tmp_path, {"model": "mystery", "strength": "weak", "params_b": None, "params_label": "?", "detection_method": "unknown"})
+    assert again["strength"] == "medium" and again["detection_method"] == "local_table"
+    fresh = llm_mod.remember_model(tmp_path, {"model": "never-seen", "strength": "weak", "params_b": None, "params_label": "?", "detection_method": "unknown"})
+    assert fresh["strength"] == "weak" and "never-seen" not in llm_mod.load_known_models(tmp_path)

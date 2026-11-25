@@ -47,6 +47,22 @@ def load(info: dict, reports_dir: Path | None = None) -> dict | None:
     return None
 
 
+def every(reports_dir: Path | None = None) -> list[dict]:
+    """Все годные профили: местные и поставляемые; местный важнее поставляемого для той же модели."""
+    out: dict[str, dict] = {}
+    for folder in (SHIPPED, local_dir(reports_dir)):
+        if not folder.is_dir():
+            continue
+        for p in sorted(folder.glob("*.json")):
+            try:
+                data = json.loads(p.read_text(encoding="utf-8"))
+            except (ValueError, OSError):
+                continue
+            if isinstance(data, dict) and data.get("version") == PROFILE_VERSION and isinstance(data.get("model"), dict):
+                out[p.name] = data
+    return list(out.values())
+
+
 def cached(info: dict, reports_dir: Path | None = None) -> dict | None:
     key = (slug(info), str(reports_dir))
     if key not in _cache:

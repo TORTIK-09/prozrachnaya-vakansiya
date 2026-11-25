@@ -249,6 +249,13 @@ class ChatLLM:
         limits = httpx.Limits(max_connections=20, max_keepalive_connections=12)
         self._client = client or httpx.Client(trust_env=not self.is_local, limits=limits)
 
+    @property
+    def strength(self) -> str:
+        """Класс силы модели: weak, medium или strong (см. detect_model_parameters)."""
+        if getattr(self, "_strength", None) is None:
+            self._strength = detect_model_parameters(self.model, self.base_url)["strength"]
+        return self._strength
+
     def describe(self) -> dict[str, str]:
         host = urlparse(self.base_url)
         provider = "ollama" if host.port == 11434 else ("local" if self.is_local else (host.hostname or "custom_api"))
@@ -381,6 +388,40 @@ KNOWN_MODEL_STRENGTH: dict[str, str] = {
 
 
 _HW_CACHE: dict[str, Any] = {"ts": 0.0, "data": None}
+
+
+def known_models_path(reports_dir: Path) -> Path:
+    return reports_dir / "known_models.json"
+
+
+def load_known_models(reports_dir: Path) -> dict[str, Any]:
+    try:
+        data = json.loads(known_models_path(reports_dir).read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except (ValueError, OSError):
+        return {}
+
+
+def remember_model(reports_dir: Path, meta: dict[str, Any]) -> dict[str, Any]:
+    """Местная таблица моделей. Модель, которой не было в справочнике, после определения добавляется сюда;
+    если определить не удалось, а раньше она уже встречалась — берётся прежняя запись."""
+    name = str(meta.get("model") or "").strip().lower()
+    if not name:
+        return meta
+    table = load_known_models(reports_dir)
+    if meta.get("detection_method") == "unknown":
+        old = table.get(name)
+        return {**meta, **old, "detection_method": "local_table"} if isinstance(old, dict) else meta
+    entry = {"strength": meta["strength"], "params_b": meta.get("params_b"), "params_label": meta.get("params_label")}
+    if table.get(name) != entry:
+        table[name] = entry
+        try:
+            p = known_models_path(reports_dir)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(json.dumps(table, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        except OSError:
+            pass
+    return meta
 
 
 def detect_hardware_specs() -> dict[str, Any]:

@@ -96,48 +96,81 @@ def _limit(sets: list[dict], limit: int | None) -> list[dict]:
 
 
 def run(llm: LLM, progress: Callable[[int, int, float], None] = lambda done, total, sec: None,
-        limit: int | None = None) -> dict:
-    """Калибровка: один запрос к модели на каждую размеченную вакансию (не больше `limit`, если он задан)."""
-    full_total = sum(len(s["vacancies"]) for s in _load_sets())
-    sets = _limit(_load_sets(), limit)
-    total = sum(len(s["vacancies"]) for s in sets)
+        limit: int | None = None, budget_seconds: float | None = None, min_tests: int = 0) -> dict:
+    """Калибровка: один запрос к модели на каждую размеченную вакансию.
+
+    `limit` — жёсткий потолок числа вакансий. `budget_seconds` — отведённое время: скорость модели меряется
+    на первых двух вакансиях, после чего берётся столько вакансий, сколько помещается во время, но не меньше
+    `min_tests` и не больше `limit`. Вакансии идут по очереди из каждого набора, поэтому даже короткая
+    калибровка видит и понятные, и проблемные.
+    """
+    all_sets = _load_sets()
+    full_total = sum(len(s["vacancies"]) for s in all_sets)
+    sets = _limit(all_sets, limit)
+    order = []                                  # (номер набора, вакансия) — по очереди из каждого набора
+    for i in range(max(len(s["vacancies"]) for s in sets)):
+        order += [(k, s["vacancies"][i]) for k, s in enumerate(sets) if i < len(s["vacancies"])]
+    total = len(order)
     done = errors = 0
     rule_time = llm_time = 0.0
-    per_set = []
+    found_r: list[dict[str, list[Finding]]] = [{} for _ in sets]
+    found_l: list[dict[str, list[Finding]]] = [{} for _ in sets]
     agree = {}
     tally: dict[tuple[str, str], dict[str, int]] = {}      # вид замечаний модели → сколько верных и лишних
-    for st in sets:
-        rule_found: dict[str, list[Finding]] = {}
-        llm_found: dict[str, list[Finding]] = {}
-        for v in st["vacancies"]:
-            t = time.perf_counter()
-            rule_found[v.id] = rules.check(v)
-            rule_time += time.perf_counter() - t
-            t = time.perf_counter()
-            try:
-                llm_found[v.id] = ai.find(v, llm)
-            except Exception:
-                llm_found[v.id] = []
-                errors += 1
-            spent = time.perf_counter() - t
-            llm_time += spent
-            done += 1
-            progress(done, total, llm_time / done)
-            must, allowed = scoring.gold_sets(st["gold"], v.id)
-            taken = {(f.topic, f.kind) for f in rule_found[v.id]}
-            # кто что видит: правило, модель или оба — и сколько из этого верно по разметке
-            seen_llm = {(f.topic, f.kind) for f in llm_found[v.id]}
-            a = agree.setdefault(st["key"], {k: [0, 0] for k in ("both", "rules_only", "llm_only")})
-            for name, keys in (("both", taken & seen_llm), ("rules_only", taken - seen_llm), ("llm_only", seen_llm - taken)):
-                a[name][0] += len(keys)
-                a[name][1] += len(keys & (must | allowed))
-            for f in llm_found[v.id]:
-                key = (f.topic, f.kind)
-                if f.kind == "missing" or key in taken:
-                    continue        # в совместной работе эти замечания модели всё равно не используются
-                cell = tally.setdefault(key, {"ok": 0, "extra": 0})
-                cell["ok" if key in must | allowed else "extra"] += 1
-        per_set.append((st, rule_found, llm_found))
+    kinds_seen: dict[tuple[str, str], int] = {}            # все замечания модели по видам — признак шаблонных ответов
+    llm_total = on_clean = clean_n = 0
+    for k, v in order:
+        st = sets[k]
+        t = time.perf_counter()
+        found_r[k][v.id] = rules.check(v)
+        rule_time += time.perf_counter() - t
+        t = time.perf_counter()
+        try:
+            found_l[k][v.id] = ai.find(v, llm)
+        except Exception:
+            found_l[k][v.id] = []
+            errors += 1
+        llm_time += time.perf_counter() - t
+        done += 1
+        if budget_seconds and done == 2:
+            # скорость измерена — уточняем, сколько вакансий помещается в отведённое время
+            fit = int(budget_seconds / max(llm_time / done, 1e-3))
+            total = max(2, min(len(order), max(min_tests, fit)))
+        progress(done, total, llm_time / done)
+        must, allowed = scoring.gold_sets(st["gold"], v.id)
+        taken = {(f.topic, f.kind) for f in found_r[k][v.id]}
+        # кто что видит: правило, модель или оба — и сколько из этого верно по разметке
+        seen_llm = {(f.topic, f.kind) for f in found_l[k][v.id]}
+        a = agree.setdefault(st["key"], {x: [0, 0] for x in ("both", "rules_only", "llm_only")})
+        for name, keys in (("both", taken & seen_llm), ("rules_only", taken - seen_llm), ("llm_only", seen_llm - taken)):
+            a[name][0] += len(keys)
+            a[name][1] += len(keys & (must | allowed))
+        clean = not must and not allowed
+        clean_n += clean
+        for f in found_l[k][v.id]:
+            key = (f.topic, f.kind)
+            kinds_seen[key] = kinds_seen.get(key, 0) + 1
+            llm_total += 1
+            on_clean += clean
+            if f.kind == "missing" or key in taken:
+                continue        # в совместной работе эти замечания модели всё равно не используются
+            cell = tally.setdefault(key, {"ok": 0, "extra": 0})
+            cell["ok" if key in must | allowed else "extra"] += 1
+        if done >= total:
+            break
+    total = done
+    per_set = []
+    for k, st in enumerate(sets):
+        vs = [v for v in st["vacancies"] if v.id in found_r[k]]
+        if vs:
+            ids = {v.id for v in vs}
+            per_set.append(({**st, "vacancies": vs, "gold": {i: g for i, g in st["gold"].items() if i in ids}},
+                            found_r[k], found_l[k]))
+    # шаблонность: модель выдаёт одно и то же замечание почти на каждую вакансию, в том числе на понятные
+    top = max(kinds_seen.values(), default=0)
+    template = {"findings": llm_total, "top_kind_share": round(top / llm_total, 2) if llm_total else 0.0,
+                "on_clean_per_vacancy": round(on_clean / clean_n, 2) if clean_n else 0.0}
+    template["templated"] = llm_total >= 5 and template["top_kind_share"] >= 0.5 and template["on_clean_per_vacancy"] >= 0.5
 
     categories, blocked = [], []
     for (topic, kind), c in sorted(tally.items()):
@@ -162,12 +195,15 @@ def run(llm: LLM, progress: Callable[[int, int, float], None] = lambda done, tot
                          "modes": {m: _brief(scoring.score(_report(vs, f), st["gold"])) for m, f in modes.items()}})
     info = llm.describe() or {}
     return {
-        "model": {"provider": info.get("provider"), "model": info.get("model")},
+        "model": {"provider": info.get("provider"), "model": info.get("model"),
+                  "kind": "local" if str(info.get("mode_type") or "").startswith("local")
+                  or info.get("provider") in ("ollama", "local") else "custom_api"},
         "version": VERSION,
         "calibrated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
         "vacancies": total, "available": full_total, "errors": errors,
         "seconds_per_vacancy": {"rules": round(rule_time / max(total, 1), 4), "llm": round(llm_time / max(total, 1), 1)},
-        "categories": categories, "blocked": blocked, "sets": out_sets,
+        "categories": categories, "blocked": blocked, "template": template,
+        "examples_in_prompt": ai.examples_for(llm), "sets": out_sets,
     }
 
 
@@ -192,7 +228,8 @@ class Job:
         with self.lock:
             return dict(self.state)
 
-    def start(self, llm: LLM, limit: int | None = None, learn_seconds: float = 0.0, cfg=None) -> bool:
+    def start(self, llm: LLM, limit: int | None = None, learn_seconds: float = 0.0, cfg=None,
+              budget_seconds: float | None = None, min_tests: int = 0) -> bool:
         """False — настройка уже идёт. `limit` — сколько вакансий взять по плану калибровки.
         `learn_seconds` — сколько времени Системный AI параллельно учится на вакансиях портала."""
         with self.lock:
@@ -208,7 +245,7 @@ class Job:
 
         def work() -> None:
             try:
-                result = run(llm, progress, limit)
+                result = run(llm, progress, limit, budget_seconds, min_tests)
                 if result["errors"] >= result["vacancies"]:
                     raise RuntimeError("модель не ответила ни на один запрос")
                 save(result, self.reports_dir)
