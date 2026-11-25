@@ -17,8 +17,8 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import calibrate, cli, config as config_mod, report, source
-from .analyze import profile, rules
+from . import calibrate, cli, config as config_mod, llm as llm_mod, report, source
+from .analyze import profile
 from .config import ROOT
 from .extra import resume as resume_mod
 
@@ -108,9 +108,53 @@ def create_app(cfg: config_mod.Config | None = None, auto_calibrate: bool = True
             return {"state": "ready", "model": prof.get("model"), "finished_at": prof.get("calibrated_at"),
                     "shipped": bool(prof.get("_shipped")), "blocked": len(prof.get("blocked", []))}
         if auto_calibrate:
-            job.start(model)
+            pl = plan()
+            job.start(model, limit=pl["llm_target_tests"], learn_seconds=pl["effective_minutes"] * 60.0, cfg=cfg)
             return job.status()
         return {"state": "needed", "model": model.describe()}
+
+    MODES = ("rules_only", "local", "local_only", "custom_api", "custom_api_only")
+
+    def saved_settings() -> dict:
+        return llm_mod.load_runtime_settings(cfg.reports) or {}
+
+    def mode() -> str:
+        """Текущий режим работы: только Системный AI, Системный AI + ИИ или только ИИ (локальный либо по API)."""
+        model = llm()
+        if model is None:
+            return "rules_only"
+        return str(model.describe().get("mode_type") or "local")
+
+    def meta() -> dict | None:
+        """Сила модели: число параметров и класс (слабая, средняя, сильная) — по Ollama, имени или справочнику."""
+        model = llm()
+        if model is None:
+            return None
+        info = model.describe()
+        key = (info.get("base_url"), info.get("model"))
+        if state.get("meta_key") != key:
+            state["meta"] = llm_mod.detect_model_parameters(str(info.get("model") or ""), str(info.get("base_url") or ""))
+            state["meta_key"] = key
+        return state["meta"]
+
+    def plan(minutes: float | None = None) -> dict:
+        """План калибровки: сколько вакансий успеет модель за отведённое время на этом компьютере."""
+        model = llm()
+        info = model.describe() if model else {}
+        prof = model_profile() if model else None
+        measured = ((prof or {}).get("seconds_per_vacancy") or {}).get("llm")
+        if minutes is None:
+            minutes = float(saved_settings().get("calib_minutes") or cfg.calib_minutes or 0) or None
+        pl = llm_mod.compute_calibration_plan(str(info.get("model") or ""), mode(), minutes,
+                                              str(info.get("base_url") or ""), measured)
+        available = sum(len(st["vacancies"]) for st in calibrate._load_sets())
+        pl["available_tests"] = available
+        pl["llm_target_tests"] = min(pl["llm_target_tests"], available)     # размеченных вакансий больше нет
+        return pl
+
+    def with_context(st: dict) -> dict:
+        """К состоянию калибровки — сила модели, режим и ход обучения Системного AI."""
+        return {**st, "meta": meta(), "mode": mode(), "learning": job.learning}
 
     @app.middleware("http")
     async def guard(request: Request, call_next):
@@ -185,11 +229,64 @@ def create_app(cfg: config_mod.Config | None = None, auto_calibrate: bool = True
                 error = None
         return {"source_url": cfg.source_url, "schedule": cfg.schedule, "max_vacancies": cfg.max_vacancies,
                 "model": info, "has_latest": (cfg.reports / "latest.json").is_file(), "last_error": error,
-                "calibration": calibration()}
+                "calibration": with_context(calibration()), "mode": mode(), "meta": meta()}
 
     @app.get("/api/calibration")
     def get_calibration():
-        return calibration()
+        return with_context(calibration())
+
+    @app.get("/api/settings")
+    def get_settings():
+        """Что можно выбрать: режимы, провайдеры и модели; что выбрано; что умеет этот компьютер."""
+        saved = saved_settings()
+        shown = {k: v for k, v in saved.items() if k != "api_key"}
+        shown["has_api_key"] = bool(saved.get("api_key"))
+        try:
+            local = llm_mod.list_local_models()
+        except Exception:
+            local = []
+        return {"modes": MODES, "mode": mode(), "saved": shown, "providers": llm_mod.PROVIDER_PRESETS,
+                "local_models": local, "hardware": llm_mod.detect_hardware_specs(), "meta": meta(),
+                "env_locked": bool(cfg.llm_base_url or cfg.llm_model)}
+
+    @app.get("/api/plan")
+    def get_plan(model: str = "", mode_type: str = "local", base_url: str = "", minutes: float | None = None):
+        """Предварительный план калибровки для выбранной модели — до сохранения настроек."""
+        if minutes is not None and not 0 < minutes <= 600:
+            raise HTTPException(422, "Время калибровки: от 1 до 600 минут")
+        pl = llm_mod.compute_calibration_plan(model[:200], mode_type if mode_type in MODES else "local", minutes, base_url[:300])
+        available = sum(len(st["vacancies"]) for st in calibrate._load_sets())
+        pl["available_tests"] = available
+        pl["llm_target_tests"] = min(pl["llm_target_tests"], available)
+        return pl
+
+    @app.post("/api/settings")
+    async def set_settings(request: Request):
+        """Сохранить выбор режима и модели. Ключ хранится только на этом компьютере, в папке reports."""
+        try:
+            body = json.loads((await request.body()).decode("utf-8"))
+        except (ValueError, UnicodeDecodeError):
+            raise HTTPException(422, "Ожидается JSON")
+        m = str(body.get("mode_type") or "")
+        if m not in MODES:
+            raise HTTPException(422, "Неизвестный режим")
+        base_url, model_name = str(body.get("base_url") or "").strip()[:300], str(body.get("model") or "").strip()[:200]
+        if m != "rules_only" and (not base_url.startswith(("http://", "https://")) or not model_name):
+            raise HTTPException(422, "Укажите адрес сервера модели и её имя")
+        prev = saved_settings()
+        key = str(body.get("api_key") or "").strip()[:500]
+        if not key and prev.get("api_key") and prev.get("base_url") == base_url:
+            key = str(prev["api_key"])          # поле ключа оставили пустым — прежний ключ для того же сервера сохраняется
+        try:
+            minutes = float(body.get("calib_minutes") or 0)
+        except (TypeError, ValueError):
+            minutes = 0.0
+        llm_mod.save_runtime_settings(cfg.reports, {
+            "mode_type": m, "provider": str(body.get("provider") or "")[:40], "base_url": base_url, "model": model_name,
+            "api_key": key, "calib_minutes": max(0.0, min(600.0, minutes))})
+        state.update(llm=None, tried=-1e9, meta_key=None)       # модель подключается заново с новыми настройками
+        profile.forget()
+        return {"ok": True, "mode": mode(), "calibration": with_context(calibration())}
 
     @app.post("/api/calibration")
     def start_calibration():
@@ -208,7 +305,7 @@ def create_app(cfg: config_mod.Config | None = None, auto_calibrate: bool = True
         saved = verdicts().values()
         human = {"rule": sum(1 for x in saved if x.get("choice") == "rule"),
                  "llm": sum(1 for x in saved if x.get("choice") == "llm")}
-        return {"stats": data, "calibration": calibration(), "verdicts": human}
+        return {"stats": data, "calibration": with_context(calibration()), "verdicts": human, "mode": mode(), "meta": meta()}
 
     @app.get("/api/report")
     def get_report(kind: str = "check"):
@@ -239,16 +336,10 @@ def create_app(cfg: config_mod.Config | None = None, auto_calibrate: bool = True
             report.write_json(cfg.reports / "verdicts.json", saved)
         return {"ok": True, "choice": None if choice == "none" else choice}
 
-    def preview(raw: list) -> None:
-        """Мгновенный предварительный результат одних правил — пока модель думает, страница уже не пустая."""
-        report.analyze_all(raw, lambda v, m=None: rules.check(v), None, cfg.workers, None, "", cli.log, progress.pending)
-
     def work_check(raw: list, src: str):
         def fn(on_entry, on_log):
             analyzer, _ = cli.get_analyzer()
             model = llm()
-            if model is not None:
-                preview(raw)
             entries, stats = report.analyze_all(raw, analyzer, model, cfg.workers, None, "", cli.log, on_entry)
             rep = report.build(entries, stats, "file", src, model)
             report.write_json(cfg.reports / "check.json", rep)
@@ -258,7 +349,7 @@ def create_app(cfg: config_mod.Config | None = None, auto_calibrate: bool = True
     def work_run(run_cfg: config_mod.Config):
         def fn(on_entry, on_log):
             code = cli.cmd_run(run_cfg, True, on_log=on_log, on_entry=on_entry,
-                               on_raw=preview if llm() is not None else None)
+                               on_raw=None)
             rep = read_report("latest")
             if code == 0:
                 return rep, None

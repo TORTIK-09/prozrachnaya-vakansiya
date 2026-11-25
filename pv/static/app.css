@@ -263,3 +263,28 @@ mark.active { outline: 2px solid var(--accent); }
 .finding.dismissed .history { opacity: 1; }
 
 .history li { align-items: center; }
+
+/* настройки ИИ, сила модели */
+.settings { display: none; margin: 14px 24px 0; padding: 16px 18px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); }
+.settings.show { display: grid; gap: 12px; animation: drop .3s ease both; }
+.settings h3 { margin: 0; font-size: 17px; }
+.modes { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 8px; }
+.mode { display: flex; gap: 9px; align-items: flex-start; border: 1px solid var(--line); border-radius: var(--r); padding: 9px 11px; cursor: pointer; }
+.mode.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.mode b { display: block; } .mode small { color: var(--ink-2); font-size: 12.5px; }
+.set-block { border: 1px solid var(--line); border-radius: var(--r); padding: 10px 14px 12px; margin: 0; display: grid; gap: 8px; min-width: 0; }
+.set-block:disabled { opacity: .5; }
+.set-block legend { font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-3); font-weight: 700; padding: 0 6px; }
+.field.wide { display: grid; grid-template-columns: 130px 1fr; gap: 10px; align-items: center; }
+.field.wide input, .field.wide select { width: 100%; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); min-width: 0; }
+.plan { font-size: 13.5px; display: grid; gap: 4px; color: var(--ink-2); } .plan b { color: var(--ink); }
+.plan .trim { color: var(--amb); font-weight: 600; }
+.set-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.strength { font-size: 13px; padding: 6px 10px; border-radius: 7px; background: var(--sunken); color: var(--ink-2); }
+.strength.weak { background: var(--amb-bg); color: var(--ink); border: 1px solid var(--amb-line); }
+.strength.strong { background: var(--ok-bg); color: var(--ink); }
+.page-note { margin: 14px 24px 0; }
+.verdict-head { flex-basis: 100%; display: grid; gap: 2px; } .verdict-head span { color: var(--ink-2); font-size: 13px; }
+.verdict .strength { flex-basis: 100%; }
+tr.active-mode td { background: var(--sunken); font-weight: 600; }
+@media (max-width: 780px) { .settings, .page-note { margin-left: 16px; margin-right: 16px; } .field.wide { grid-template-columns: 1fr; gap: 3px; } }

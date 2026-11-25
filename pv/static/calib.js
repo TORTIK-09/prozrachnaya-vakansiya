@@ -12,6 +12,13 @@ function calibDuration(sec) {
 function calibModel(c) { return c.model && c.model.model ? "«" + c.model.model + "»" : ""; }
 function calibKey(c) { return "pv-calib-closed:" + (c.model ? c.model.provider + "/" + c.model.model : "") + ":" + (c.finished_at || ""); }
 
+// Пока калибруется ИИ, Системный AI параллельно учится на вакансиях портала.
+function learningText(c) {
+  const l = c.learning;
+  if (!l || !l.vacancies) return "";
+  return " Системный AI за это время " + (l.state === "running" ? "уже изучил " : "изучил ") + l.vacancies + " вакансий портала.";
+}
+
 function showModelChip(c) {
   const chip = document.getElementById("modelChip");
   if (!chip) return;
@@ -27,7 +34,10 @@ function showModelChip(c) {
 }
 
 function showCalibration(c) {
+  if ("meta" in c) window.PV_META = c.meta;        // сила модели — для предупреждений рядом с её ответами
   showModelChip(c);
+  const weak = document.getElementById("weakNote");
+  if (weak) { const on = c.meta && c.meta.strength === "weak" && c.state !== "no_model"; weak.hidden = !on; if (on) weak.textContent = "Модель «" + c.model.model + "» небольшая (" + c.meta.params_label + "): её ответы могут быть неточными, проверяйте их."; }
   const box = document.getElementById("calib");
   if (!box) return;
   const title = document.getElementById("calibTitle"), sub = document.getElementById("calibSub");
@@ -39,12 +49,12 @@ function showCalibration(c) {
   if (c.state === "running") {
     box.classList.add("show");
     title.textContent = "ИИ калибруется: модель " + calibModel(c) + " — подождите, " + calibDuration(c.eta_seconds);
-    sub.textContent = (c.total ? "Проверено вакансий: " + c.done + " из " + c.total + ". " : "Модель загружается в память. ") + "Сервис встретил эту модель впервые: она разбирает размеченные вакансии, и по результату сервис решает, каким её ответам доверять. До конца калибровки в отчётах работает только Системный AI.";
+    sub.textContent = (c.total ? "Проверено вакансий: " + c.done + " из " + c.total + ". " : "Модель загружается в память. ") + "Сервис встретил эту модель впервые: она разбирает размеченные вакансии, и по результату сервис решает, каким её ответам доверять. До конца калибровки в отчётах работает только Системный AI." + learningText(c);
     bar.style.width = (c.total ? Math.max(3, Math.round(c.done / c.total * 100)) : 3) + "%";
   } else if (c.state === "done" && !closed) {
     box.classList.add("show", "done");
     title.textContent = "Калибровка ИИ завершена: модель " + calibModel(c);
-    sub.textContent = "Проверено вакансий: " + c.vacancies + (c.errors ? ", без ответа: " + c.errors : "") + ". Отключено ненадёжных видов замечаний: " + c.blocked + ". В среднем " + c.seconds_per_vacancy + " с на вакансию.";
+    sub.textContent = "Проверено вакансий: " + c.vacancies + (c.available ? " из " + c.available : "") + "." + learningText(c) + (c.errors ? ", без ответа: " + c.errors : "") + ". Отключено ненадёжных видов замечаний: " + c.blocked + " В среднем " + c.seconds_per_vacancy + " с на вакансию.";
     close.hidden = false; if (link) link.hidden = false;
   } else if (c.state === "failed" && !closed) {
     box.classList.add("show", "failed");

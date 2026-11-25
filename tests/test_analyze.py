@@ -226,14 +226,16 @@ def test_llm_client_request_and_fallbacks():
 
     client = httpx.Client(transport=httpx.MockTransport(handler))
     m = llm_mod.from_config(Config(), client=client)
-    assert m.describe() == {"provider": "ollama", "model": "qwen2.5:7b"}     # взята установленная модель того же семейства
+    d = m.describe()
+    assert (d["provider"], d["model"], d["mode_type"]) == ("ollama", "qwen2.5:7b", "local")     # взята установленная модель того же семейства
     assert m.complete("с", "п") == '{"findings": []}'
     assert seen["auth"] is None and seen["body"]["temperature"] == 0 and seen["body"]["model"] == "qwen2.5:7b"
 
     down = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(503)))
     assert llm_mod.from_config(Config(), client=down) is None                 # Ollama не запущена — работают правила
     cloud = llm_mod.from_config(Config(llm_base_url="https://api.example/v1", llm_model="m1", llm_api_key="k"), client=down)
-    assert cloud.describe() == {"provider": "api.example", "model": "m1"}
+    d = cloud.describe()
+    assert (d["provider"], d["model"], d["mode_type"]) == ("api.example", "m1", "custom_api")
 
 
 def test_ai_parse_tolerates_wrapping_text():

@@ -60,11 +60,12 @@ def test_calibration_measures_three_ways_and_blocks_unreliable_kind():
     seen = []
     r = calibrate.run(llm, lambda done, total, sec: seen.append((done, total)))
     assert llm.calls == r["vacancies"] == 32 and seen[-1] == (32, 32) and r["errors"] == 0
-    assert r["blocked"] == [["requirements", "ambiguous"]]             # две придирки, ни одного попадания
+    # придирки отключены; единственное верное замечание тоже — одного подтверждения мало, доверие нужно заслужить
+    assert r["blocked"] == [["requirements", "ambiguous"], ["title", "contradiction"]]
     cats = {(c["topic"], c["kind"]): c for c in r["categories"]}
-    assert cats[("title", "contradiction")] == {"topic": "title", "kind": "contradiction", "ok": 1, "extra": 0, "blocked": False}
+    assert cats[("title", "contradiction")] == {"topic": "title", "kind": "contradiction", "ok": 1, "extra": 0, "blocked": True}
     extra, sample = modes(r, "extra"), modes(r, "sample")
-    assert extra["rules"]["must_found"] == 7 and extra["llm"]["must_found"] == 1 and extra["both"]["must_found"] == 8
+    assert extra["rules"]["must_found"] == 7 and extra["llm"]["must_found"] == 1 and extra["both"]["must_found"] == 7 and extra["both_raw"]["must_found"] == 8
     assert extra["both_raw"]["extra_total"] == 1 and extra["both"]["extra_total"] == 0
     assert sample["both_raw"]["extra_on_clean"] == 1 and sample["both"]["extra_on_clean"] == 0
     assert sample["both"]["recall"] == 1.0 and sample["llm"]["recall"] < 1.0
@@ -123,7 +124,8 @@ def wait_done(c):
 
 def test_panel_without_model(tmp_path, monkeypatch):
     c = client_with(None, tmp_path, monkeypatch)
-    assert c.get("/api/calibration").json() == {"state": "no_model"}
+    st = c.get("/api/calibration").json()
+    assert st["state"] == "no_model" and st["mode"] == "rules_only" and st["meta"] is None
     s = c.get("/api/stats").json()
     assert s["stats"]["model"] is None and set(s["stats"]["sets"][0]["modes"]) == {"rules"}
     assert c.post("/api/calibration").status_code == 409
@@ -135,14 +137,14 @@ def test_unknown_model_is_calibrated_automatically_then_recognised(tmp_path, mon
     first = c.get("/api/calibration").json()
     assert first["state"] == "running" and first["model"]["model"] == "fake-1"
     done = wait_done(c)
-    assert done["state"] == "done" and done["vacancies"] == 32 and done["blocked"] == 1
+    assert done["state"] == "done" and 10 <= done["vacancies"] <= done["available"] == 32     # число вакансий — по плану калибровки
     stats = c.get("/api/stats").json()["stats"]
     assert stats["model"]["model"] == "fake-1" and "both" in stats["sets"][0]["modes"]
     # после перезапуска панели та же модель узнаётся и заново не настраивается
     llm2 = Fake()
     c2 = client_with(llm2, tmp_path, monkeypatch)
     st = c2.get("/api/calibration").json()
-    assert st["state"] == "ready" and st["blocked"] == 1 and llm2.calls == 0
+    assert st["state"] == "ready" and llm2.calls == 0 and st["mode"] == "local" and st["meta"]["strength"] == "weak"
     # а модель с другим именем — незнакомая
     c3 = client_with(Fake("fake-2"), tmp_path, monkeypatch)
     assert c3.get("/api/calibration").json()["state"] == "running"
@@ -182,3 +184,56 @@ def test_calibration_counts_who_sees_what():
     a = {s["key"]: s["agreement"] for s in r["sets"]}
     assert a["extra"]["llm_only"] == [2, 1] and a["extra"]["both"] == [0, 0] and a["extra"]["rules_only"] == [7, 7]
     assert a["sample"]["rules_only"][0] == a["sample"]["rules_only"][1] > 10
+
+
+def test_calibration_limit_takes_from_every_set_and_trust_must_be_earned():
+    llm = Fake()
+    r = calibrate.run(llm, limit=9)
+    assert r["vacancies"] == 9 and llm.calls == 9 and r["available"] == 32
+    assert [s["modes"]["rules"]["vacancies"] for s in r["sets"]] == [3, 3, 3]
+    assert all(c["blocked"] for c in r["categories"] if c["ok"] < 2)
+
+
+def test_settings_modes_and_plan(tmp_path, monkeypatch):
+    from pv import llm as llm_mod
+    monkeypatch.setattr(cli, "log", lambda m: None)
+    monkeypatch.setattr(llm_mod, "list_local_models", lambda base_url="": ["qwen2.5:3b"])
+    seen = {}
+
+    def make(cfg, enabled):
+        saved = llm_mod.load_runtime_settings(cfg.reports) or {}
+        seen["saved"] = saved
+        if saved.get("mode_type", "rules_only") == "rules_only":
+            return None
+        m = Fake(saved["model"])
+        m.describe = lambda: {"provider": "test", "model": saved["model"], "mode_type": saved["mode_type"], "base_url": saved["base_url"]}
+        return m
+
+    monkeypatch.setattr(cli, "make_llm", make)
+    cfg = config.Config(reports_dir=str(tmp_path / "reports"))
+    c = TestClient(web.create_app(cfg, auto_calibrate=False), base_url="http://127.0.0.1:8085")
+    s = c.get("/api/settings").json()
+    assert s["mode"] == "rules_only" and "ollama" in s["providers"] and s["local_models"] == ["qwen2.5:3b"] and s["hardware"]["cpu_cores"] >= 1
+    body = {"mode_type": "custom_api_only", "provider": "custom", "base_url": "https://api.example/v1", "model": "big-70b", "api_key": "k-123", "calib_minutes": 5}
+    r = c.post("/api/settings", content=json.dumps(body)).json()
+    assert r["mode"] == "custom_api_only" and r["calibration"]["meta"]["strength"] == "strong"
+    s = c.get("/api/settings").json()
+    assert s["saved"]["has_api_key"] is True and "api_key" not in s["saved"] and "k-123" not in json.dumps(s)
+    # ключ не теряется, если поле оставили пустым для того же сервера
+    c.post("/api/settings", content=json.dumps({**body, "api_key": "", "mode_type": "custom_api"}))
+    assert seen["saved"]["api_key"] == "k-123" and c.get("/api/calibration").json()["mode"] == "custom_api"
+    assert c.post("/api/settings", content=json.dumps({"mode_type": "чужой"})).status_code == 422
+    assert c.post("/api/settings", content=json.dumps({"mode_type": "local", "base_url": "ftp://x", "model": "m"})).status_code == 422
+    c.post("/api/settings", content=json.dumps({"mode_type": "rules_only"}))
+    assert c.get("/api/calibration").json()["state"] == "no_model"
+    p = c.get("/api/plan?model=qwen2.5:3b&mode_type=local&minutes=600").json()
+    assert p["model_meta"]["strength"] == "weak" and p["time_trimmed"] is True and p["llm_target_tests"] <= p["available_tests"] == 32
+    assert c.get("/api/plan?minutes=0").status_code == 422
+
+
+def test_ai_only_mode_skips_system_ai(monkeypatch):
+    llm = Fake()
+    llm.describe = lambda: {"provider": "test", "model": "fake-1", "mode_type": "local_only"}
+    v = normalize({"id": "K", "job-name": "Водитель автомобиля", "duty": "Ведение бухгалтерского учёта, сверка расчётов.",
+                   "schedule": "Гибкий график", "requirement": {"experience": 1}})
+    assert {(f.topic, f.source) for f in analyze(v, llm)} == {("title", "llm")}

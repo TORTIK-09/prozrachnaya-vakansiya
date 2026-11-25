@@ -66,9 +66,40 @@ def rules_only() -> dict:
             "seconds_per_vacancy": {"rules": round((time.perf_counter() - t0) / max(n, 1), 4)}}
 
 
-def run(llm: LLM, progress: Callable[[int, int, float], None] = lambda done, total, sec: None) -> dict:
-    """Полная настройка: один запрос к модели на каждую размеченную вакансию."""
-    sets = _load_sets()
+MIN_CONFIRMED = 2       # вид замечаний модели остаётся включённым, только если подтвердился хотя бы дважды
+
+
+def _limit(sets: list[dict], limit: int | None) -> list[dict]:
+    """Не больше `limit` вакансий на всё: по очереди из каждого набора, чтобы в выборке были и понятные, и проблемные."""
+    total = sum(len(s["vacancies"]) for s in sets)
+    if not limit or limit >= total:
+        return sets
+    take = {s["key"]: 0 for s in sets}
+    left = max(1, limit)
+    while left > 0:
+        moved = False
+        for s in sets:
+            if left > 0 and take[s["key"]] < len(s["vacancies"]):
+                take[s["key"]] += 1
+                left -= 1
+                moved = True
+        if not moved:
+            break
+    out = []
+    for s in sets:
+        vs = s["vacancies"][:take[s["key"]]]
+        if vs:
+            ids = {v.id for v in vs}
+            # разметка — только по взятым вакансиям, иначе невзятые посчитаются пропущенными
+            out.append({**s, "vacancies": vs, "gold": {k: g for k, g in s["gold"].items() if k in ids}})
+    return out
+
+
+def run(llm: LLM, progress: Callable[[int, int, float], None] = lambda done, total, sec: None,
+        limit: int | None = None) -> dict:
+    """Калибровка: один запрос к модели на каждую размеченную вакансию (не больше `limit`, если он задан)."""
+    full_total = sum(len(s["vacancies"]) for s in _load_sets())
+    sets = _limit(_load_sets(), limit)
     total = sum(len(s["vacancies"]) for s in sets)
     done = errors = 0
     rule_time = llm_time = 0.0
@@ -111,7 +142,8 @@ def run(llm: LLM, progress: Callable[[int, int, float], None] = lambda done, tot
     categories, blocked = [], []
     for (topic, kind), c in sorted(tally.items()):
         n = c["ok"] + c["extra"]
-        off = c["ok"] / n < MIN_PRECISION
+        # доверие нужно заслужить: мало подтверждений или больше ошибок, чем попаданий, — вид отключается
+        off = c["ok"] / n < MIN_PRECISION or c["ok"] < MIN_CONFIRMED
         categories.append({"topic": topic, "kind": kind, "ok": c["ok"], "extra": c["extra"], "blocked": off})
         if off:
             blocked.append([topic, kind])
@@ -133,7 +165,7 @@ def run(llm: LLM, progress: Callable[[int, int, float], None] = lambda done, tot
         "model": {"provider": info.get("provider"), "model": info.get("model")},
         "version": VERSION,
         "calibrated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
-        "vacancies": total, "errors": errors,
+        "vacancies": total, "available": full_total, "errors": errors,
         "seconds_per_vacancy": {"rules": round(rule_time / max(total, 1), 4), "llm": round(llm_time / max(total, 1), 1)},
         "categories": categories, "blocked": blocked, "sets": out_sets,
     }
@@ -153,14 +185,16 @@ class Job:
         self.reports_dir = reports_dir
         self.lock = threading.Lock()
         self.state: dict = {"state": "idle"}
+        self.learning: dict = {"state": "idle", "vacancies": 0}
         self.thread: threading.Thread | None = None
 
     def status(self) -> dict:
         with self.lock:
             return dict(self.state)
 
-    def start(self, llm: LLM) -> bool:
-        """False — настройка уже идёт."""
+    def start(self, llm: LLM, limit: int | None = None, learn_seconds: float = 0.0, cfg=None) -> bool:
+        """False — настройка уже идёт. `limit` — сколько вакансий взять по плану калибровки.
+        `learn_seconds` — сколько времени Системный AI параллельно учится на вакансиях портала."""
         with self.lock:
             if self.state.get("state") == "running":
                 return False
@@ -174,13 +208,14 @@ class Job:
 
         def work() -> None:
             try:
-                result = run(llm, progress)
+                result = run(llm, progress, limit)
                 if result["errors"] >= result["vacancies"]:
                     raise RuntimeError("модель не ответила ни на один запрос")
                 save(result, self.reports_dir)
                 with self.lock:
                     self.state = {"state": "done", "model": result["model"], "finished_at": result["calibrated_at"],
-                                  "vacancies": result["vacancies"], "errors": result["errors"],
+                                  "vacancies": result["vacancies"], "available": result["available"],
+                                  "errors": result["errors"],
                                   "blocked": len(result["blocked"]),
                                   "seconds_per_vacancy": result["seconds_per_vacancy"]["llm"]}
             except Exception as e:
@@ -190,4 +225,40 @@ class Job:
 
         self.thread = threading.Thread(target=work, name="calibration", daemon=True)
         self.thread.start()
+        if learn_seconds > 0 and cfg is not None:
+            threading.Thread(target=self._learn, args=(cfg, learn_seconds), name="system-ai-learning", daemon=True).start()
         return True
+
+    def _learn(self, cfg, seconds: float) -> None:
+        """Пока калибруется ИИ, Системный AI учится на вакансиях портала: пересчитывает нормы по должностям.
+
+        Успевает столько страниц, сколько помещается во время калибровки, — вплоть до всего портала.
+        Портал недоступен — ничего страшного: остаются нормы, поставляемые с проектом.
+        """
+        import httpx
+
+        from . import source
+        from .analyze import norms
+        t0, raw, page = time.monotonic(), [], 0
+        self.learning = {"state": "running", "vacancies": 0}
+        try:
+            with httpx.Client(headers={"User-Agent": "prozrachnaya-vakansiya/0.1"}, follow_redirects=True) as client:
+                while time.monotonic() - t0 < seconds:
+                    body = source._get_page(client, cfg, page, 100, time.sleep)
+                    items = source.extract(body)
+                    if not items:
+                        break
+                    raw.extend(items)
+                    page += 1
+                    self.learning = {"state": "running", "vacancies": len(raw)}
+                    if len(items) < 100:
+                        break
+        except Exception as e:
+            if not raw:
+                self.learning = {"state": "failed", "vacancies": 0, "error": f"{type(e).__name__}: {e}"[:200]}
+                return
+        table = norms.build(v for v in map(normalize, raw) if v)
+        if table["groups"]:
+            report.write_json(norms.local_path(self.reports_dir), table)
+            norms.forget()
+        self.learning = {"state": "done", "vacancies": len(raw), "groups": len(table["groups"])}

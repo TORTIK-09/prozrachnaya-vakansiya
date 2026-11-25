@@ -53,6 +53,12 @@ def analyze(v: Vacancy, llm: LLM | None = None, mode: str = "both") -> list[Find
         info = llm.describe() or {}
     except Exception:
         info = {}
+    if info.get("mode_type") in ("local_only", "custom_api_only"):
+        # режим «только ИИ»: человек сам выбрал отчёт одной модели, без Системного AI
+        try:
+            return _sorted(ai.find(v, llm))
+        except Exception:
+            return []
     prof = profile.cached(info)
     if prof is None:
         # модель ещё не настроена: неизвестно, каким её замечаниям можно верить, поэтому в отчёт они не идут

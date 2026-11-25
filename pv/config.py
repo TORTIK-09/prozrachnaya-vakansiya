@@ -24,6 +24,7 @@ class Config:
     llm_api_key: str = ""
     web_host: str = "127.0.0.1"
     web_port: int = 8085
+    calib_minutes: float = 0.0       # сколько минут отдать калибровке ИИ; 0 — столько, сколько советует план
 
     @property
     def reports(self) -> Path:

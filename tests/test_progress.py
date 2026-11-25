@@ -121,8 +121,9 @@ def test_pages_ship_live_scripts(slow):
     assert c.get("/static/live.js").headers["cache-control"] == "no-cache"
 
 
-def test_rules_preview_comes_first_when_model_is_slow(tmp_path, monkeypatch):
-    """С моделью страница сразу получает замечания правил, а потом — уточнённые записи."""
+def test_with_model_vacancy_appears_only_after_both_processed_it(tmp_path, monkeypatch):
+    """С подключённым ИИ вакансия показывается, только когда её обработали оба: Системный AI и ИИ."""
+    from pv.analyze import profile
     gate = threading.Semaphore(0)
 
     class Slow:
@@ -133,17 +134,18 @@ def test_rules_preview_comes_first_when_model_is_slow(tmp_path, monkeypatch):
             gate.acquire(timeout=5)
             return '{"findings": []}'
 
-    from pv.analyze import profile
     monkeypatch.setattr(profile, "cached", lambda info, reports_dir=None: {"blocked": []})
     monkeypatch.setattr(cli, "make_llm", lambda c, enabled: Slow())
     monkeypatch.setattr(cli, "log", lambda m: None)
     cfg = config.Config(reports_dir=str(tmp_path / "reports"), workers=1)
     c = TestClient(web.create_app(cfg, auto_calibrate=False), base_url="http://127.0.0.1:8085")
     c.post("/api/check?background=1", content=json.dumps(RAW[:3]), headers={"content-type": "application/json"})
-    p = wait(c, lambda p: len(p["entries"]) == 3)
-    assert p["done"] == 0 and p["awaiting_model"] is True and all(e["pending"] for e in p["entries"])
-    assert p["entries"][0]["findings"][0]["source"] == "rule"
-    for _ in range(3):
-        gate.release()
+    time.sleep(0.3)
+    p = c.get("/api/progress").json()
+    assert p["state"] == "running" and p["entries"] == [] and p["done"] == 0      # Системный AI уже всё разобрал, но это не показывается
+    gate.release()
+    p = wait(c, lambda p: p["done"] == 1)
+    assert len(p["entries"]) == 1 and not p["entries"][0]["pending"]
+    gate.release(); gate.release()
     p = wait(c, lambda p: p["state"] == "done")
     assert p["done"] == 3 and p["with_findings"] == 3

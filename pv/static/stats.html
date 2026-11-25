@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Статистика — Прозрачная вакансия</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23173a3a'/%3E%3Ccircle cx='14' cy='14' r='6.5' fill='none' stroke='%23f2b441' stroke-width='2.6'/%3E%3Cpath d='m19 19 6 6' stroke='%23f4efe4' stroke-width='2.8' stroke-linecap='round'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="/static/app.css?v=11">
+<link rel="stylesheet" href="/static/app.css?v=12">
 <style>
 .page { max-width: 1120px; margin: 0 auto; padding: 22px 24px 40px; display: grid; gap: 16px; }
 .lead h2 { margin: 0 0 6px; font-size: 26px; letter-spacing: -.02em; }
@@ -56,6 +56,7 @@ details ul { margin: 8px 0 0; padding-left: 20px; font-size: 13.5px; } details l
   <span class="chip" id="modelChip"><i></i><span>модель: проверяю…</span></span>
   <button class="icon-btn" id="themeBtn" title="Светлая или тёмная тема" aria-label="Сменить тему">◐</button>
 </header>
+<div class="strength weak page-note" id="weakNote" hidden></div>
 <div class="notice" id="calib" role="status"><span class="spin"></span><div class="body"><b id="calibTitle"></b><span class="sub" id="calibSub"></span><div class="bar2"><u id="calibBar" style="width:0"></u></div></div><button class="btn" id="calibClose" hidden>Закрыть</button></div>
 
 <main class="page" id="page">
@@ -71,7 +72,8 @@ details ul { margin: 8px 0 0; padding-left: 20px; font-size: 13.5px; } details l
   <div id="out"><div class="box muted">Загружаю…</div></div>
 </main>
 
-<script src="/static/calib.js?v=5"></script>
+<script src="/static/settings.js?v=2"></script>
+<script src="/static/calib.js?v=6"></script>
 <script>
 "use strict";
 const TOPICS = {title: "Название должности", duties: "Обязанности", requirements: "Требования", salary: "Оплата", schedule: "График", location: "Место работы", employment: "Тип занятости"};
@@ -95,8 +97,9 @@ const pairName = p => (TOPICS[p[0]] || p[0]) + " — " + (KINDS[p[1]] || p[1]);
 function setTable(st) {
   const rows = MODES.filter(([k]) => st.modes[k]).map(([k, name, cls]) => {
     const m = st.modes[k];
-    return el("tr", {},
-      el("td", {}, el("i", {class: cls, style: "display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:8px"}), name),
+    const act = k === window.__active || (window.__active === "both" && k === "both");
+    return el("tr", {class: act ? "active-mode" : ""},
+      el("td", {}, act ? el("span", {class: "on", style: "margin-right:8px", text: "текущий режим"}) : null, el("i", {class: cls, style: "display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:8px"}), name),
       el("td", {}, el("div", {class: "meter"}, el("div", {class: "t"}, el("u", {class: cls, style: "width:" + (m.must_total ? m.must_found / m.must_total * 100 : 0) + "%"})), el("span", {text: m.must_found + " из " + m.must_total}))),
       el("td", {class: "n", text: m.found_total ? pct(m.precision) : "—"}),
       el("td", {class: "n" + (m.extra_total ? " bad" : " good"), text: String(m.extra_total)}),
@@ -148,6 +151,11 @@ function verdict(d) {
 function render(d, calib) {
   const out = [];
   if (!d.model) out.push(el("section", {class: "box"}, el("b", {text: calib.state === "running" ? "ИИ сейчас калибруется — полное сравнение появится здесь по окончании." : "Модель не подключена — показан только Системный AI."}), el("div", {class: "muted", text: "Чтобы увидеть сравнение, запустите Ollama или задайте адрес модели в настройках и откройте эту страницу снова."})));
+  const mode = window.__mode || "rules_only", ACTIVE = {rules_only: "rules", local: "both", custom_api: "both", local_only: "llm", custom_api_only: "llm"}[mode];
+  out.push(el("section", {class: "box"}, el("h3", {text: "Текущий режим: " + ((typeof MODE_NAMES !== "undefined" && MODE_NAMES[mode]) || [mode])[0]}),
+    el("p", {class: "about", text: mode === "rules_only" ? "Отчёт собирает один Системный AI. Ниже — его показатели; строки модели появятся, когда модель будет подключена и откалибрована." : "В таблицах ниже строка этого режима выделена. Все числа измерены на этой модели и этом компьютере при калибровке — ничего не оценивается заочно: режим, в котором модель не запускалась, показателей не имеет."}),
+    strengthNote(window.__meta)));
+  window.__active = d.model ? ACTIVE : "rules";
   out.push(el("section", {class: "box verdict"}, el("h3", {text: "Что показывают числа"}), el("ul", {}, verdict(d).map(t => el("li", {text: t})))));
   for (const st of d.sets) out.push(setTable(st));
   if (d.model) {
@@ -179,7 +187,7 @@ function render(d, calib) {
 async function load() {
   try {
     const r = await fetch("/api/stats"); const data = await r.json();
-    window.__verdicts = data.verdicts;
+    window.__verdicts = data.verdicts; window.__mode = data.mode; window.__meta = data.meta;
     render(data.stats, data.calibration);
   } catch (e) { $("out").replaceChildren(el("div", {class: "box", text: "Не удалось загрузить статистику: " + e.message})); }
 }
