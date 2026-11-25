@@ -176,7 +176,7 @@ def run(llm: LLM, progress: Callable[[int, int, float], None] = lambda done, tot
     for (topic, kind), c in sorted(tally.items()):
         n = c["ok"] + c["extra"]
         # доверие нужно заслужить: мало подтверждений или больше ошибок, чем попаданий, — вид отключается
-        off = c["ok"] / n < MIN_PRECISION or c["ok"] < MIN_CONFIRMED
+        off = not profile.trusted(c["ok"], c["extra"])
         categories.append({"topic": topic, "kind": kind, "ok": c["ok"], "extra": c["extra"], "blocked": off})
         if off:
             blocked.append([topic, kind])

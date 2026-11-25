@@ -4,62 +4,315 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Прозрачная вакансия</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23173a3a'/%3E%3Ccircle cx='14' cy='14' r='6.5' fill='none' stroke='%23f2b441' stroke-width='2.6'/%3E%3Cpath d='m19 19 6 6' stroke='%23f4efe4' stroke-width='2.8' stroke-linecap='round'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="/static/app.css?v=13">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230d1726'/%3E%3Ccircle cx='14' cy='14' r='6.5' fill='none' stroke='%23f59e0b' stroke-width='2.6'/%3E%3Cpath d='m19 19 6 6' stroke='%23f8fafc' stroke-width='2.8' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/app.css?v=14">
 </head>
 <body>
-<header class="top">
-  <div class="logo">
-    <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="14" cy="14" r="7.5" fill="none" stroke="#f2b441" stroke-width="2.6"/><path d="m19.5 19.5 7 7" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/><path d="M10.5 14h7M10.5 11h4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" opacity=".8"/></svg>
-    <div><h1>Прозрачная вакансия</h1><p>Насколько понятно описаны условия работы · Калининградская область</p></div>
-  </div>
-  <nav class="nav" aria-label="Разделы"><a href="/" aria-current="page">Отчёт</a><a href="/stats">Статистика</a></nav>
-  <span class="chip" id="modelChip"><i></i><span>модель: проверяю…</span></span>
-  <button class="icon-btn" id="themeBtn" title="Светлая или тёмная тема" aria-label="Сменить тему">◐</button>
-</header>
-
-<div class="bar">
-  <div class="seg" role="group" aria-label="Какой отчёт показать">
-    <button id="segCheck" aria-pressed="true">Проверочный набор</button>
-    <button id="segLatest" aria-pressed="false">Вакансии с портала</button>
-  </div>
-  <span class="grow"></span>
-  <span id="actionsCheck" style="display:contents">
-    <button class="btn" id="btnSample"><span class="spin"></span><span id="btnSampleText">Проверить учебный набор</span></button>
-    <button class="btn primary" id="btnUpload"><span class="spin"></span>Проверить свой JSON…</button>
-    <input type="file" id="file" accept=".json,application/json" hidden>
-  </span>
-  <span id="actionsLatest" style="display:none">
-    <label class="field">не больше <input type="number" id="maxV" min="1" max="5000" value="200"> вакансий</label>
-    <button class="btn primary" id="btnRun"><span class="spin"></span>Загрузить с портала</button>
-  </span>
-  <button class="btn" id="btnSettings" onclick="toggleSettings()">Настройки ИИ</button>
-  <a class="btn" id="jsonLink" href="/api/report?kind=check" target="_blank" rel="noopener">JSON отчёта</a>
-</div>
-<dialog class="settings" id="settings" aria-label="Настройки ИИ"></dialog>
-<div class="banner" id="banner" role="status"></div>
-<div class="runline" id="runline" role="status"><span class="spin"></span><div class="body"><b id="runText"></b><span class="sub" id="runSub"></span><div class="bar2"><u id="runBar" style="width:0"></u></div></div></div>
-<div class="strength weak page-note" id="weakNote" hidden></div>
-<div class="notice" id="calib" role="status"><span class="spin"></span><div class="body"><b id="calibTitle"></b><span class="sub" id="calibSub"></span><div class="bar2"><u id="calibBar" style="width:0"></u></div></div><a class="btn" href="/stats" id="calibLink" hidden>Что показала калибровка</a><button class="btn" id="calibClose" hidden>Закрыть</button></div>
-
-<section class="summary" aria-label="Сводка по отчёту">
-  <div class="stat"><b class="num" id="sTotal">—</b><span>вакансий в отчёте</span></div>
-  <div class="stat ok"><b class="num" id="sClean">—</b><span>понятных, без замечаний</span></div>
-  <div class="stat warn"><b class="num" id="sBad">—</b><span>нужно уточнить</span></div>
-  <div class="stat"><b class="num" id="sFind">—</b><span>замечаний всего</span></div>
-  <div class="topics" id="topics" aria-label="Замечания по темам"></div>
-</section>
-
-<main class="work">
-  <aside class="pane">
-    <div class="list-head">
-      <input type="search" id="q" placeholder="Поиск по должности, организации, ID" aria-label="Поиск по вакансиям">
-      <div class="filters" id="kindFilters"></div>
+<div class="sb-backdrop" id="sbBackdrop" onclick="toggleSidebar(false)"></div>
+<div class="app-shell">
+  <aside class="sidebar" id="sidebar" aria-label="Навигация">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <a class="sb-brand" href="/">
+        <span class="sb-brand-ico" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>
+        </span>
+        <span class="sb-brand-title">прозрачная<br>вакансия<span>.</span></span>
+      </a>
+      <button type="button" class="sb-close" aria-label="Закрыть меню" onclick="toggleSidebar(false)">✕</button>
     </div>
-    <div class="list" id="list"></div>
+
+    <div class="sb-workspace">
+      <span class="sb-ws-badge">К</span>
+      <div class="sb-ws-meta">
+        <b>Рабочее пространство</b>
+        <small>Калининградская область</small>
+      </div>
+    </div>
+
+    <div class="sb-label">Ваш поиск работы</div>
+    <nav class="sb-nav" aria-label="Основные разделы">
+      <button type="button" class="sb-link active" id="navReport" onclick="openTab('report', 'audit')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+        <span>Отчёт по вакансиям</span>
+        <span class="sb-count num" id="sbVacCount">—</span>
+      </button>
+      <button type="button" class="sb-link" id="navResume" onclick="openTab('report', 'resume')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h5"/></svg>
+        <span>Резюме под вакансию</span>
+      </button>
+      <a class="sb-link" href="/stats">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10"/><path d="M12 20V4"/><path d="M20 20v-7"/></svg>
+        <span>Статистика</span>
+      </a>
+      <button type="button" class="sb-link" id="navHow" onclick="openTab('how')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+        <span>Как это работает</span>
+      </button>
+    </nav>
+
+    <div class="sb-promo">
+      <span class="sb-promo-ico" aria-hidden="true">✦</span>
+      <b>Анализ с вниманием к каждой детали</b>
+      <p>Системный AI и языковая модель помогают увидеть то, что скрыто между строк.</p>
+      <button type="button" onclick="openTab('how')">Как это работает →</button>
+    </div>
+
+    <div class="sb-foot">
+      <button type="button" class="sb-link" onclick="toggleSettings()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3"/><path d="M12 18v3"/><path d="m4.93 4.93 2.12 2.12"/><path d="m16.95 16.95 2.12 2.12"/><path d="M3 12h3"/><path d="M18 12h3"/><circle cx="12" cy="12" r="3.5"/></svg>
+        <span>Настройки ИИ</span>
+      </button>
+      <button type="button" class="sb-link" id="navHelp" onclick="openTab('help')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+        <span>Помощь и документация</span>
+      </button>
+    </div>
   </aside>
-  <section class="pane detail" id="detail"><div class="empty">Выберите вакансию слева</div></section>
-</main>
+
+  <div class="main-area">
+    <header class="top">
+      <button type="button" class="icon-btn menu-btn" aria-label="Открыть меню" onclick="toggleSidebar(true)">☰</button>
+      <div class="crumbs">
+        <span>Рабочая панель</span>
+        <span>/</span>
+        <b id="crumbCurrent">Обзор отчёта</b>
+      </div>
+      <span class="top-loc">📍 Калининградская область</span>
+      <span class="chip" id="modelChip"><i></i><span>модель: проверяю…</span></span>
+      <button class="icon-btn" id="themeBtn" title="Светлая или тёмная тема" aria-label="Сменить тему">◐</button>
+      <button class="icon-btn" title="Помощь и документация" aria-label="Помощь" onclick="openTab('help')">?</button>
+    </header>
+
+    <dialog class="settings" id="settings" aria-label="Настройки ИИ"></dialog>
+    <div class="banner" id="banner" role="status"></div>
+    <div class="runline" id="runline" role="status"><span class="spin"></span><div class="body"><b id="runText"></b><span class="sub" id="runSub"></span><div class="bar2"><u id="runBar" style="width:0"></u></div></div></div>
+    <div class="strength weak page-note" id="weakNote" hidden></div>
+    <div class="notice" id="calib" role="status"><span class="spin"></span><div class="body"><b id="calibTitle"></b><span class="sub" id="calibSub"></span><div class="bar2"><u id="calibBar" style="width:0"></u></div></div><a class="btn" href="/stats" id="calibLink" hidden>Что показала калибровка</a><button class="btn" id="calibClose" hidden>Закрыть</button></div>
+
+    <div id="viewReport">
+      <section class="hero-wrap">
+        <div class="hero">
+          <div class="hero-top">
+            <div>
+              <div class="hero-eyebrow"><i></i><span>Больше ясности. Меньше сомнений.</span></div>
+              <h2>Работа — без<span>скрытых условий.</span></h2>
+              <p>Пойми, что тебе подходит сегодня. Взвесь все за и против — до первого отклика.</p>
+              <div class="hero-actions">
+                <button type="button" class="btn primary" onclick="document.querySelector('.work').scrollIntoView({behavior:'smooth'})">К вакансиям →</button>
+                <button type="button" class="hero-link" onclick="openTab('how')">Как это работает ›</button>
+              </div>
+            </div>
+            <div class="hero-visual">
+              <img src="/static/hero-cats.jpg" alt="Внимательный анализ вакансий">
+              <div class="hero-caption">🔍 Внимательны даже к мелкому шрифту</div>
+            </div>
+          </div>
+          <div class="hero-steps">
+            <div class="hero-step"><span>01</span><div><b>Все условия на виду</b><small>Зарплата, график, обязанности</small></div></div>
+            <div class="hero-step"><span>02</span><div><b>Ничего между строк</b><small>Находим, что стоит уточнить</small></div></div>
+            <div class="hero-step"><span>03</span><div><b>Осознанный выбор</b><small>Окончательное решение — за вами</small></div></div>
+          </div>
+        </div>
+      </section>
+
+      <div class="section-head">
+        <div>
+          <div class="section-eyebrow"><i></i><span>Ясные условия — осознанный выбор</span></div>
+          <h2>Отчёт по вакансиям</h2>
+          <p>Помогаем увидеть, что стоит уточнить у работодателя.</p>
+        </div>
+        <button class="btn primary" id="btnUpload"><span class="spin"></span>↑ Загрузить отчёт (JSON)</button>
+        <input type="file" id="file" accept=".json,application/json" hidden>
+      </div>
+
+      <div class="bar">
+        <div class="seg" role="group" aria-label="Какой отчёт показать">
+          <button id="segCheck" aria-pressed="true">Проверочный набор</button>
+          <button id="segLatest" aria-pressed="false">Вакансии с портала</button>
+        </div>
+        <span class="grow"></span>
+        <span id="actionsCheck" style="display:contents">
+          <button class="btn" id="btnSample"><span class="spin"></span><span id="btnSampleText">Проверить учебный набор</span></button>
+        </span>
+        <span id="actionsLatest" style="display:none">
+          <label class="field">не больше <input type="number" id="maxV" min="1" max="5000" value="200"> вакансий</label>
+          <button class="btn primary" id="btnRun"><span class="spin"></span>Загрузить с портала</button>
+        </span>
+        <button class="btn" id="btnSettings" onclick="toggleSettings()">Настройки ИИ</button>
+        <a class="btn" id="jsonLink" href="/api/report?kind=check" target="_blank" rel="noopener">↓ Экспорт JSON</a>
+      </div>
+
+      <section class="summary" aria-label="Сводка по отчёту">
+        <div class="stat">
+          <div class="stat-top"><span>Всего вакансий</span><span class="stat-ico">▤</span></div>
+          <b class="num" id="sTotal">—</b>
+          <small>в текущем отчёте</small>
+        </div>
+        <div class="stat ok">
+          <div class="stat-top"><span>Понятные вакансии</span><span class="stat-ico">✓</span></div>
+          <b class="num" id="sClean">—</b>
+          <small>без замечаний</small>
+        </div>
+        <div class="stat warn">
+          <div class="stat-top"><span>Нужно уточнить</span><span class="stat-ico">⚠</span></div>
+          <b class="num" id="sBad">—</b>
+          <small>есть вопросы к условиям</small>
+        </div>
+        <div class="stat find">
+          <div class="stat-top"><span>Всего замечаний</span><span class="stat-ico">⚑</span></div>
+          <b class="num" id="sFind">—</b>
+          <small>найдено при проверке</small>
+        </div>
+      </section>
+
+      <div class="topics-wrap">
+        <div class="topics" id="topics" aria-label="Замечания по темам"></div>
+      </div>
+
+      <main class="work">
+        <aside class="pane">
+          <div class="list-head">
+            <input type="search" id="q" placeholder="Поиск по должности, организации, ID" aria-label="Поиск по вакансиям">
+            <div class="filters" id="kindFilters"></div>
+          </div>
+          <div class="list" id="list"></div>
+        </aside>
+        <section class="pane detail" id="detail"><div class="empty">Выберите вакансию слева</div></section>
+      </main>
+    </div>
+
+    <section class="docs-view" id="viewHow" hidden>
+      <div class="docs-hero">
+        <div>
+          <div class="hero-eyebrow"><i></i><span>Методика сервиса · Двухконтурный анализ</span></div>
+          <h2>Как работает «Прозрачная вакансия»</h2>
+          <p>Сочетание детерминированных правил Системного AI и языковой модели без выдуманных цитат и без дообучения весов на ваших данных.</p>
+        </div>
+        <button type="button" class="btn primary" onclick="openTab('report', 'audit')">Вернуться к отчёту →</button>
+      </div>
+
+      <div class="docs-grid">
+        <div class="doc-card">
+          <div class="doc-card-head">
+            <span class="doc-badge">Шаг 1 · Системный AI</span>
+            <span class="doc-ico">01</span>
+          </div>
+          <b>Структурные проверки и нормы</b>
+          <p>Встроенный алгоритм мгновенно сверяет поля карточки: минимальную и максимальную оплату, опыт в поле и в тексте, дистанционный формат и офис, полноту адреса, график и тип занятости.</p>
+        </div>
+        <div class="doc-card">
+          <div class="doc-card-head">
+            <span class="doc-badge">Шаг 2 · Языковая модель</span>
+            <span class="doc-ico blue">02</span>
+          </div>
+          <b>Смысловые нестыковки</b>
+          <p>Подключённая локальная или облачная ИИ читает текст и ищет скрытые смысловые противоречия (например, должность «Водитель» с обязанностями бухгалтера). Все цитаты проверяются на дословное совпадение.</p>
+        </div>
+        <div class="doc-card">
+          <div class="doc-card-head">
+            <span class="doc-badge">Шаг 3 · Редактор</span>
+            <span class="doc-ico green">03</span>
+          </div>
+          <b>Выбор за вами и история</b>
+          <p>Если Системный AI и ИИ расходятся во мнении, вы сами выбираете верный ответ. Веса нейросети при этом не меняются — модель не дообучается на ваших данных.</p>
+        </div>
+      </div>
+
+      <div class="card" style="padding:18px 20px;box-shadow:var(--shadow);">
+        <h4 style="margin-bottom:12px;">7 тем проверки каждой вакансии</h4>
+        <div class="topics-grid">
+          <div class="topic-tile"><b>Название должности</b><small>Общие слова без специализации или несоответствие обязанностям.</small></div>
+          <div class="topic-tile"><b>Обязанности</b><small>Наличие конкретных задач вместо общих фраз «по поручению».</small></div>
+          <div class="topic-tile"><b>Требования и опыт</b><small>Соответствие стажа и образования в поле и в тексте описания.</small></div>
+          <div class="topic-tile"><b>Оплата труда</b><small>Диапазон от/до, оговорки «по договорённости» и противоречия сумм.</small></div>
+          <div class="topic-tile"><b>График работы</b><small>Согласованность режима (5/2, сменный, гибкий) и рабочих часов.</small></div>
+          <div class="topic-tile"><b>Место работы и адрес</b><small>Полнота адреса и проверка конфликта «удалённо / в офисе».</small></div>
+          <div class="topic-tile"><b>Тип занятости</b><small>Соответствие полной/частичной занятости описанному режиму дня.</small></div>
+        </div>
+      </div>
+
+      <div class="docs-grid">
+        <div class="doc-card accent-con">
+          <span class="kind contradiction" style="justify-self:start">Противоречие</span>
+          <b>Два поля говорят разное</b>
+          <p>Например, в поле опыта указан «0», а в тексте требований написано «опыт работы от 3 лет», или указана удалённая работа при обязательном ежедневном посещении офиса.</p>
+        </div>
+        <div class="doc-card accent-amb">
+          <span class="kind ambiguous" style="justify-self:start">Неоднозначность</span>
+          <b>Условие описано размыто</b>
+          <p>Например, указан «гибкий график» без режима часов, «з/п по договорённости» или обязанности сформулированы общими словами без конкретных задач.</p>
+        </div>
+        <div class="doc-card accent-mis">
+          <span class="kind missing" style="justify-self:start">Пропуск</span>
+          <b>Важных сведений нет</b>
+          <p>Поле источника пустое, и во всём тексте вакансии не удалось найти ключевую информацию по теме (например, отсутствует адрес при работе на территории работодателя).</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="docs-view" id="viewHelp" hidden>
+      <div class="docs-hero">
+        <div>
+          <div class="hero-eyebrow"><i></i><span>Руководство пользователя</span></div>
+          <h2>Помощь и документация</h2>
+          <p>Быстрый старт: загрузка своих JSON-файлов, выгрузка с портала региона 39, калибровка ИИ и работа с резюме.</p>
+        </div>
+        <button type="button" class="btn primary" onclick="openTab('report', 'audit')">Перейти к отчёту →</button>
+      </div>
+
+      <div class="docs-grid two-col">
+        <div class="doc-card">
+          <div class="doc-card-head">
+            <b>1. Проверка учебного набора или своего JSON</b>
+            <span class="doc-ico">JSON</span>
+          </div>
+          <p>Загрузите файл в формате API «Работа в России» для мгновенного разбора без обращения к внешнему порталу, или проверьте встроенный учебный набор.</p>
+          <div class="doc-card-foot">
+            <button type="button" class="btn" onclick="openTab('report', 'audit'); $('file').click();">↑ Выбрать JSON-файл</button>
+          </div>
+        </div>
+        <div class="doc-card">
+          <div class="doc-card-head">
+            <b>2. Живые вакансии Калининградской области</b>
+            <span class="doc-ico blue">API</span>
+          </div>
+          <p>Переключитесь на «Вакансии с портала», укажите лимит (до 5000) и запустите загрузку. Прогресс и готовые карточки появляются в реальном времени.</p>
+          <div class="doc-card-foot">
+            <button type="button" class="btn" onclick="openTab('report', 'audit'); switchKind('latest');">Открыть вкладку портала →</button>
+          </div>
+        </div>
+        <div class="doc-card">
+          <div class="doc-card-head">
+            <b>3. Настройка и калибровка ИИ</b>
+            <span class="doc-ico">ИИ</span>
+          </div>
+          <p>Выберите один из 5 режимов: только Системный AI, локальная модель (Ollama, LM Studio и др.) или внешний API (OpenAI, Gemini, DeepSeek и др.) с калибровкой под ваш ПК.</p>
+          <div class="doc-card-foot">
+            <button type="button" class="btn" onclick="toggleSettings()">⚙ Открыть настройки ИИ</button>
+          </div>
+        </div>
+        <div class="doc-card">
+          <div class="doc-card-head">
+            <b>4. Черновик резюме под вакансию</b>
+            <span class="doc-ico green">CV</span>
+          </div>
+          <p>Откройте любую вакансию и перейдите во вкладку «Резюме под вакансию». Сервис переставит навыки и опыт кандидата строго без дописывания фактов и подготовит вопросы работодателю.</p>
+          <div class="doc-card-foot">
+            <button type="button" class="btn" onclick="openTab('report', 'resume')">Перейти к резюме →</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="sec-card">
+        <span class="doc-ico">🔒</span>
+        <div>
+          <b style="display:block;margin-bottom:3px;font-size:15px;">Безопасность и приватность данных</b>
+          <p class="note" style="margin:0;line-height:1.5;">Контактные данные (телефоны, e-mail, имена контактных лиц) удаляются на этапе нормализации и не передаются в языковую модель. API-ключи хранятся только локально на вашем компьютере в папке <span class="mono">reports/</span>.</p>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
 
 <script src="/static/settings.js?v=3"></script>
 <script src="/static/calib.js?v=7"></script>
@@ -72,9 +325,50 @@ const FIELD_NAMES = {"job-name": "Название должности", "duty": 
 const FIELD_ORDER = Object.keys(FIELD_NAMES);
 const fieldName = f => "Поле «" + (FIELD_NAMES[f] || f) + "»";
 const ALWAYS = ["job-name", "duty", "requirements", "salary_min", "salary_max", "schedule", "employment", "addresses.address[].location"];
-const S = {kind: "check", report: null, sel: null, q: "", fKind: null, fTopic: null, tab: "audit", resumes: [], resumeId: null};
+const S = {kind: "check", report: null, sel: null, q: "", fKind: null, fTopic: null, tab: "audit", resumes: [], resumeId: null, pageTab: "report"};
 const $ = id => document.getElementById(id);
 const put = (node, ...kids) => node.replaceChildren(...kids.flat().filter(k => k !== null && k !== undefined && k !== false));
+
+function toggleSidebar(force) {
+  const sb = $("sidebar"), bd = $("sbBackdrop");
+  if (!sb || !bd) return;
+  const open = force === undefined ? !sb.classList.contains("open") : force;
+  sb.classList.toggle("open", open);
+  bd.classList.toggle("show", open);
+}
+
+function syncNavByScroll() {
+  if (S.pageTab !== "report") return;
+  const work = document.querySelector(".work");
+  const inWork = work ? work.getBoundingClientRect().top <= 240 : false;
+  const activeNav = (S.tab === "resume" && inWork) ? "navResume" : "navReport";
+  for (const id of ["navReport", "navResume", "navHow", "navHelp"]) {
+    const n = $(id);
+    if (n) n.classList.toggle("active", id === activeNav);
+  }
+  $("crumbCurrent").textContent = (S.tab === "resume" && inWork) ? "Резюме под вакансию" : "Обзор отчёта";
+}
+window.addEventListener("scroll", syncNavByScroll, {passive: true});
+
+function openTab(pageTab, detailTab) {
+  toggleSidebar(false);
+  S.pageTab = pageTab;
+  $("viewReport").hidden = pageTab !== "report";
+  $("viewHow").hidden = pageTab !== "how";
+  $("viewHelp").hidden = pageTab !== "help";
+  if (detailTab) S.tab = detailTab;
+  const activeNav = pageTab === "how" ? "navHow" : pageTab === "help" ? "navHelp" : (detailTab === "resume" ? "navResume" : "navReport");
+  for (const id of ["navReport", "navResume", "navHow", "navHelp"]) {
+    const n = $(id);
+    if (n) n.classList.toggle("active", id === activeNav);
+  }
+  $("crumbCurrent").textContent = {report: detailTab === "resume" ? "Резюме под вакансию" : "Обзор отчёта", how: "Как это работает", help: "Помощь и документация"}[pageTab] || "Обзор отчёта";
+  if (pageTab === "report" && detailTab) {
+    renderDetail();
+    if (detailTab === "resume") $("detail").scrollIntoView({behavior: "smooth", block: "start"});
+    else if (detailTab === "audit") window.scrollTo({top: 0, behavior: "smooth"});
+  }
+}
 
 function el(tag, attrs, ...kids) {
   const n = document.createElement(tag);
@@ -143,6 +437,8 @@ function renderSummary() {
   setNum("sClean", S.report ? vs.length - bad : null);
   setNum("sBad", S.report ? bad : null);
   setNum("sFind", S.report ? total : null);
+  const sbCnt = $("sbVacCount");
+  if (sbCnt) sbCnt.textContent = S.report ? String(vs.length) : "—";
   const by = {}; let max = 1;
   for (const t in TOPICS) by[t] = {contradiction: 0, ambiguous: 0, missing: 0, n: 0};
   for (const v of vs) for (const f of live(v)) if (by[f.topic]) { by[f.topic][f.kind]++; by[f.topic].n++; }
@@ -183,7 +479,6 @@ function renderList() {
 }
 
 function highlight(text, marks) {
-  // marks: [{start, end, kind, idx}] без пересечений; текст вставляется только как текст
   const out = []; let pos = 0;
   for (const m of marks.sort((a, b) => a.start - b.start)) {
     if (m.start < pos) continue;
@@ -214,15 +509,14 @@ function renderDetail() {
       el("div", {class: "sub"}, [v.company, "ID " + v.id].filter(Boolean).join(" · "), url ? " · " : null, url ? el("a", {href: url, target: "_blank", rel: "noopener noreferrer", text: "карточка на портале"}) : null)),
     el("div", {class: "d-actions"}, fs.length ? el("button", {class: "btn", onclick: e => copyText("Вакансия «" + (v.title || v.id) + "»" + (url ? " (" + url + ")" : "") + "\n\n" + fs.map((f, i) => (i + 1) + ". " + f.recommendation).join("\n"), e.currentTarget), text: "Скопировать вопросы работодателю"}) : null));
   const tabs = el("div", {class: "tabs", role: "tablist"},
-    el("button", {role: "tab", "aria-selected": String(S.tab === "audit"), onclick: () => { S.tab = "audit"; renderDetail(); }, text: "Разбор вакансии"}),
-    el("button", {role: "tab", "aria-selected": String(S.tab === "resume"), onclick: () => { S.tab = "resume"; renderDetail(); }, text: "Резюме под вакансию"}));
+    el("button", {role: "tab", "aria-selected": String(S.tab === "audit"), onclick: () => { S.tab = "audit"; renderDetail(); syncNavByScroll(); }, text: "Разбор вакансии"}),
+    el("button", {role: "tab", "aria-selected": String(S.tab === "resume"), onclick: () => { S.tab = "resume"; renderDetail(); syncNavByScroll(); }, text: "Резюме под вакансию"}));
   const box = $("detail"), changed = box.dataset.shown !== v.id + "|" + S.tab + "|" + (v.findings || []).length;
   box.dataset.shown = v.id + "|" + S.tab + "|" + (v.findings || []).length;
   box.replaceChildren(head, tabs, S.tab === "resume" ? resumeView(v) : auditView(v));
   if (changed) { box.classList.remove("fade"); void box.offsetWidth; box.classList.add("fade"); }
 }
 
-// История решений по замечанию: каким был статус, каким стал и когда.
 function statusChip(f, choice) {
   const off = (f.source === "rule" && choice === "llm") || (f.source === "llm" && choice === "rule");
   return off ? el("span", {class: "kind ok", text: "проблемы нет"}) : el("span", {class: "kind " + f.kind, text: KINDS[f.kind] || f.kind});
@@ -240,7 +534,6 @@ function historyBlock(f) {
     el("ol", {}, h.slice().reverse().map(x => el("li", {}, el("time", {text: fmtWhen(x.at)}), statusChip(f, x.from), el("span", {class: "arrow", text: "→"}), statusChip(f, x.to)))));
 }
 
-// Расхождение: один метод видит проблему, другой — нет. Человек принимает один из ответов.
 function verdictBar(v, f) {
   const ruleSays = f.source === "rule" ? "проблема есть" : "проблемы нет", aiSays = f.source === "llm" ? "проблема есть" : "проблемы нет";
   async function choose(choice) {
@@ -250,7 +543,7 @@ function verdictBar(v, f) {
       if (was !== now) (f.history = f.history || []).push({at: new Date().toISOString(), from: was, to: now});
       if (choice === "none") { delete f.verdict; delete f._fresh; } else { f.verdict = choice; f._fresh = true; }
       renderSummary(); renderList(); renderDetail();
-      delete f._fresh;          // зелёная пометка показывается один раз — сразу после выбора — и сама гаснет
+      delete f._fresh;
     } catch (e) { banner(e.message); }
   }
   if (f.verdict) return el("div", {class: "verdict"}, el("span", {text: dismissed(f) ? "Замечание снято: принято, что проблемы нет." : "Замечание подтверждено."}), el("button", {class: "copy", onclick: () => choose("none"), text: "изменить решение"}));
@@ -261,12 +554,10 @@ function verdictBar(v, f) {
     strengthNote(window.PV_META, true));
 }
 
-// Кто видит проблему: правило, ИИ или оба. Две маленькие метки; погашенная — «не видит».
 function whoSees(f) {
   const m = S.report && S.report.model, ai = m && m.used && m.calibrated;
   const rule = f.source !== "llm", llm = f.source === "llm" || f.source === "both";
   if (!ai && !llm) return el("span", {class: "who"}, el("i", {class: "on", title: "Проблему нашёл Системный AI. ИИ эту вакансию не проверял", text: "Системный AI"}));
-  // до решения человека ничего не зачёркнуто: горит тот, кто видит проблему; после — выбранный ответ отмечен, невыбранный зачёркнут
   const cls = who => f.verdict ? (f.verdict === who ? "on chosen" : "off") : ((who === "rule" ? rule : llm) ? "on" : "idle");
   const title = f.verdict ? (f.verdict === "llm" ? "Принят ответ ИИ" : "Принят ответ Системного AI")
     : rule && llm ? "Проблему видят и Системный AI, и ИИ. Формулировка — от ИИ" : rule ? "Проблему видит Системный AI, ИИ её не отметил" : "Проблему отметил только ИИ, Системный AI её не видит";
@@ -369,8 +660,11 @@ try { const t = localStorage.getItem("pv-theme"); if (t === "light" || t === "da
   } catch { /* статус необязателен */ }
   try { S.resumes = await api("/api/resumes"); S.resumeId = (S.resumes[0] || {}).id || null; } catch { /* без сценария */ }
   watchCalibration();
-  autoOpenSettings();          // при первом запуске сайта — сразу выбор режима и модели
+  autoOpenSettings();
   await loadReport();
+  const urlTab = new URLSearchParams(location.search).get("tab");
+  if (urlTab === "how" || urlTab === "help") openTab(urlTab);
+  else if (urlTab === "resume") openTab("report", "resume");
   let running = false;
   try { running = (await api("/api/progress")).state === "running"; } catch { /* старый сервис без показа хода */ }
   watchJobs();

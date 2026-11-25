@@ -20,6 +20,14 @@ SHIPPED = Path(__file__).resolve().parent.parent / "profiles"
 _cache: dict[tuple[str, str], dict | None] = {}
 
 
+MIN_PRECISION = 0.75    # вид замечаний модели остаётся включённым, если верных среди них не меньше трёх четвертей
+MIN_CONFIRMED = 2       # …и он подтвердился хотя бы дважды: доверие нужно заслужить
+
+
+def trusted(ok: int, extra: int) -> bool:
+    return ok >= MIN_CONFIRMED and ok / max(ok + extra, 1) >= MIN_PRECISION
+
+
 def slug(info: dict) -> str:
     """Имя файла профиля: провайдер и модель. Одна и та же модель на другом сервере — другая модель."""
     raw = f"{info.get('provider') or 'unknown'}__{info.get('model') or 'unknown'}"
@@ -79,4 +87,9 @@ def blocked(profile: dict | None) -> set[tuple[str, str]]:
     """Виды замечаний модели, которые в отчёт не пускаются."""
     if not profile:
         return set()
-    return {tuple(x) for x in profile.get("blocked", []) if isinstance(x, list) and len(x) == 2}
+    out = {tuple(x) for x in profile.get("blocked", []) if isinstance(x, list) and len(x) == 2}
+    # пороги доверия применяются и к уже сохранённым профилям: по числу верных и лишних замечаний каждого вида
+    for c in profile.get("categories", []):
+        if isinstance(c, dict) and not trusted(int(c.get("ok", 0)), int(c.get("extra", 0))):
+            out.add((c.get("topic"), c.get("kind")))
+    return out

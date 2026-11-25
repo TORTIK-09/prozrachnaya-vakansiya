@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Статистика — Прозрачная вакансия</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23173a3a'/%3E%3Ccircle cx='14' cy='14' r='6.5' fill='none' stroke='%23f2b441' stroke-width='2.6'/%3E%3Cpath d='m19 19 6 6' stroke='%23f4efe4' stroke-width='2.8' stroke-linecap='round'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="/static/app.css?v=13">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230d1726'/%3E%3Ccircle cx='14' cy='14' r='6.5' fill='none' stroke='%23f59e0b' stroke-width='2.6'/%3E%3Cpath d='m19 19 6 6' stroke='%23f8fafc' stroke-width='2.8' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/app.css?v=14">
 <style>
 .page { max-width: 1120px; margin: 0 auto; padding: 22px 24px 40px; display: grid; gap: 16px; }
 .lead h2 { margin: 0 0 6px; font-size: 26px; letter-spacing: -.02em; }
@@ -47,30 +47,93 @@ details ul { margin: 8px 0 0; padding-left: 20px; font-size: 13.5px; } details l
 </style>
 </head>
 <body>
-<header class="top">
-  <div class="logo">
-    <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="14" cy="14" r="7.5" fill="none" stroke="#f2b441" stroke-width="2.6"/><path d="m19.5 19.5 7 7" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/><path d="M10.5 14h7M10.5 11h4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" opacity=".8"/></svg>
-    <div><h1>Прозрачная вакансия</h1><p>Насколько понятно описаны условия работы · Калининградская область</p></div>
-  </div>
-  <nav class="nav" aria-label="Разделы"><a href="/">Отчёт</a><a href="/stats" aria-current="page">Статистика</a></nav>
-  <span class="chip" id="modelChip"><i></i><span>модель: проверяю…</span></span>
-  <button class="icon-btn" id="themeBtn" title="Светлая или тёмная тема" aria-label="Сменить тему">◐</button>
-</header>
-<div class="strength weak page-note" id="weakNote" hidden></div>
-<div class="notice" id="calib" role="status"><span class="spin"></span><div class="body"><b id="calibTitle"></b><span class="sub" id="calibSub"></span><div class="bar2"><u id="calibBar" style="width:0"></u></div></div><button class="btn" id="calibClose" hidden>Закрыть</button></div>
+<div class="sb-backdrop" id="sbBackdrop" onclick="toggleSidebar(false)"></div>
+<div class="app-shell">
+  <aside class="sidebar" id="sidebar" aria-label="Навигация">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <a class="sb-brand" href="/">
+        <span class="sb-brand-ico" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>
+        </span>
+        <span class="sb-brand-title">прозрачная<br>вакансия<span>.</span></span>
+      </a>
+      <button type="button" class="sb-close" aria-label="Закрыть меню" onclick="toggleSidebar(false)">✕</button>
+    </div>
+    <div class="sb-workspace">
+      <span class="sb-ws-badge">К</span>
+      <div class="sb-ws-meta">
+        <b>Рабочее пространство</b>
+        <small>Калининградская область</small>
+      </div>
+    </div>
+    <div class="sb-label">Ваш поиск работы</div>
+    <nav class="sb-nav" aria-label="Основные разделы">
+      <a class="sb-link" href="/">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+        <span>Отчёт по вакансиям</span>
+      </a>
+      <a class="sb-link" href="/?tab=resume">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h5"/></svg>
+        <span>Резюме под вакансию</span>
+      </a>
+      <a class="sb-link active" href="/stats" aria-current="page">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10"/><path d="M12 20V4"/><path d="M20 20v-7"/></svg>
+        <span>Статистика</span>
+      </a>
+      <a class="sb-link" href="/?tab=how">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+        <span>Как это работает</span>
+      </a>
+    </nav>
+    <div class="sb-promo">
+      <span class="sb-promo-ico" aria-hidden="true">✦</span>
+      <b>Анализ с вниманием к каждой детали</b>
+      <p>Системный AI и языковая модель помогают увидеть то, что скрыто между строк.</p>
+      <a href="/?tab=how" style="color:var(--accent);font-size:12.5px;font-weight:600;text-decoration:none;">Как это работает →</a>
+    </div>
+    <div class="sb-foot">
+      <button type="button" class="sb-link" onclick="toggleSettings()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3"/><path d="M12 18v3"/><path d="m4.93 4.93 2.12 2.12"/><path d="m16.95 16.95 2.12 2.12"/><path d="M3 12h3"/><path d="M18 12h3"/><circle cx="12" cy="12" r="3.5"/></svg>
+        <span>Настройки ИИ</span>
+      </button>
+      <a class="sb-link" href="/?tab=help">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+        <span>Помощь и документация</span>
+      </a>
+    </div>
+  </aside>
 
-<main class="page" id="page">
-  <section class="lead">
-    <h2>Что находит Системный AI, что — модель и что — вместе</h2>
-    <p>Один и тот же набор размеченных вакансий разобран тремя способами. По каждой вакансии заранее записано, какие замечания должны быть найдены, поэтому способы можно сравнить числами, а не на глаз.</p>
-  </section>
-  <section class="ways">
-    <div class="way"><b><i class="c-rules"></i>Только Системный AI</b><span>Так в сервисе называется встроенный алгоритм на правилах: проверки полей и шаблоны формулировок. Это не нейросеть: работает без модели, мгновенно, всегда одинаково.</span></div>
-    <div class="way"><b><i class="c-llm"></i>Только модель</b><span>Языковая модель разбирает вакансию сама. Её цитаты сверяются с текстом вакансии, выдуманные отбрасываются.</span></div>
-    <div class="way"><b><i class="c-both"></i>Вместе</b><span>Замечания Системного AI принимаются как есть, модель добавляет то, чего Системный AI не нашёл. Так сервис работает в отчёте.</span></div>
-  </section>
-  <div id="out"><div class="box muted">Загружаю…</div></div>
-</main>
+  <div class="main-area">
+    <header class="top">
+      <button type="button" class="icon-btn menu-btn" aria-label="Открыть меню" onclick="toggleSidebar(true)">☰</button>
+      <div class="crumbs">
+        <span>Рабочая панель</span>
+        <span>/</span>
+        <b>Статистика</b>
+      </div>
+      <span class="top-loc">📍 Калининградская область</span>
+      <span class="chip" id="modelChip"><i></i><span>модель: проверяю…</span></span>
+      <button class="icon-btn" id="themeBtn" title="Светлая или тёмная тема" aria-label="Сменить тему">◐</button>
+      <a class="icon-btn" title="Помощь и документация" aria-label="Помощь" href="/?tab=help" style="text-decoration:none;">?</a>
+    </header>
+    <dialog class="settings" id="settings" aria-label="Настройки ИИ"></dialog>
+    <div class="strength weak page-note" id="weakNote" hidden></div>
+    <div class="notice" id="calib" role="status"><span class="spin"></span><div class="body"><b id="calibTitle"></b><span class="sub" id="calibSub"></span><div class="bar2"><u id="calibBar" style="width:0"></u></div></div><button class="btn" id="calibClose" hidden>Закрыть</button></div>
+
+    <main class="page" id="page">
+      <section class="lead">
+        <h2>Что находит Системный AI, что — модель и что — вместе</h2>
+        <p>Один и тот же набор размеченных вакансий разобран тремя способами. По каждой вакансии заранее записано, какие замечания должны быть найдены, поэтому способы можно сравнить числами, а не на глаз.</p>
+      </section>
+      <section class="ways">
+        <div class="way"><b><i class="c-rules"></i>Только Системный AI</b><span>Так в сервисе называется встроенный алгоритм на правилах: проверки полей и шаблоны формулировок. Это не нейросеть: работает без модели, мгновенно, всегда одинаково.</span></div>
+        <div class="way"><b><i class="c-llm"></i>Только модель</b><span>Языковая модель разбирает вакансию сама. Её цитаты сверяются с текстом вакансии, выдуманные отбрасываются.</span></div>
+        <div class="way"><b><i class="c-both"></i>Вместе</b><span>Замечания Системного AI принимаются как есть, модель добавляет то, чего Системный AI не нашёл. Так сервис работает в отчёте.</span></div>
+      </section>
+      <div id="out"><div class="box muted">Загружаю…</div></div>
+    </main>
+  </div>
+</div>
 
 <script src="/static/settings.js?v=3"></script>
 <script src="/static/calib.js?v=7"></script>
@@ -80,6 +143,13 @@ const TOPICS = {title: "Название должности", duties: "Обяз�
 const KINDS = {contradiction: "противоречие", ambiguous: "неоднозначность", missing: "пропуск"};
 const MODES = [["rules", "Только Системный AI", "c-rules"], ["llm", "Только модель", "c-llm"], ["both_raw", "Вместе, до калибровки ИИ", "c-both"], ["both", "Вместе, после калибровки", "c-both"]];
 const $ = id => document.getElementById(id);
+function toggleSidebar(force) {
+  const sb = $("sidebar"), bd = $("sbBackdrop");
+  if (!sb || !bd) return;
+  const open = force === undefined ? !sb.classList.contains("open") : force;
+  sb.classList.toggle("open", open);
+  bd.classList.toggle("show", open);
+}
 function el(tag, attrs, ...kids) {
   const n = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs || {})) {
@@ -97,7 +167,7 @@ const pairName = p => (TOPICS[p[0]] || p[0]) + " — " + (KINDS[p[1]] || p[1]);
 function setTable(st) {
   const rows = MODES.filter(([k]) => st.modes[k]).map(([k, name, cls]) => {
     const m = st.modes[k];
-    const act = k === window.__active || (window.__active === "both" && k === "both");
+    const act = k === window.__active;
     return el("tr", {class: act ? "active-mode" : ""},
       el("td", {}, act ? el("span", {class: "on", style: "margin-right:8px", text: "текущий режим"}) : null, el("i", {class: cls, style: "display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:8px"}), name),
       el("td", {}, el("div", {class: "meter"}, el("div", {class: "t"}, el("u", {class: cls, style: "width:" + (m.must_total ? m.must_found / m.must_total * 100 : 0) + "%"})), el("span", {text: m.must_found + " из " + m.must_total}))),
@@ -112,38 +182,45 @@ function setTable(st) {
   return el("section", {class: "box"}, el("h3", {text: st.title + " · " + st.modes.rules.vacancies + " " + plural(st.modes.rules.vacancies, "вакансия", "вакансии", "вакансий")}),
     el("p", {class: "about", text: {sample: "Десять вакансий, выданных организаторами вместе с заданием. Четыре из них понятные: замечаний по ним быть не должно.", extra: "Двенадцать вакансий, которые мы написали сами: поле говорит одно, а свободный текст — другое (пятидневка в поле и скользящий график в тексте, адрес в одном городе и рабочее место в другом). Правила для таких расхождений писались с оглядкой на эти примеры, поэтому результат здесь завышен.", holdout: "Десять вакансий с теми же видами расхождений в других формулировках. Написаны после правил и до их первого прогона на этом наборе; правила по его результатам не правились. Это самая честная из трёх проверок, хотя и её составляли мы сами."}[st.key] || st.about || ""}),
     el("div", {class: "scroll"}, el("table", {}, el("thead", {}, el("tr", {}, el("th", {text: "Способ"}), el("th", {text: "Найдено обязательных замечаний"}), el("th", {class: "n", title: "Доля найденных замечаний, которые есть в разметке", text: "Точность"}), el("th", {class: "n", text: "Лишних"}), el("th", {class: "n", title: "Лишние замечания по вакансиям, где замечаний быть не должно", text: "Лишних на понятных"}))), el("tbody", {}, rows))),
-    agreement(st),
+    agreement(st, window.__mode),
     el("details", {}, el("summary", {text: "Где именно расхождения"}), el("ul", {}, details)));
 }
 
 // Совпадение мнений: что видят оба, что только правила, что только ИИ — и сколько из этого верно.
-function agreement(st) {
+function agreement(st, mode) {
   const a = st.agreement;
   if (!a) return null;
+  const llmOnlyMode = mode === "local_only" || mode === "custom_api_only";
   const row = (name, x, note) => el("tr", {}, el("td", {text: name}), el("td", {class: "n", text: String(x[0])}), el("td", {class: "n" + (x[0] && x[1] === x[0] ? " good" : x[0] && x[1] < x[0] / 2 ? " bad" : ""), text: x[0] ? x[1] + " из " + x[0] : "—"}), el("td", {class: "muted", text: note}));
   return el("div", {class: "scroll", style: "margin-top:14px"}, el("table", {}, el("thead", {}, el("tr", {}, el("th", {text: "Кто видит проблему"}), el("th", {class: "n", text: "Замечаний"}), el("th", {class: "n", text: "Из них верных"}), el("th", {text: "Что с ними делает сервис"}))),
-    el("tbody", {}, row("И Системный AI, и ИИ", a.both, "одно замечание с формулировкой ИИ"), row("Только Системный AI", a.rules_only, "показывается с пометкой, что ИИ не видит"), row("Только ИИ", a.llm_only, "показывается, если этот вид замечаний у модели надёжен"))));
+    el("tbody", {},
+      row("И Системный AI, и ИИ", a.both, llmOnlyMode ? "попадает в отчёт от ИИ (Системный AI в этом режиме отключён)" : "одно замечание с формулировкой ИИ"),
+      row("Только Системный AI", a.rules_only, llmOnlyMode ? "в режиме «Только ИИ» в отчёт не идёт" : "показывается с пометкой, что ИИ не видит"),
+      row("Только ИИ", a.llm_only, "показывается, если этот вид замечаний у модели надёжен"))));
 }
 
 function verdict(d) {
   const by = Object.fromEntries(d.sets.map(s => [s.key, s.modes]));
-  const s = by.sample, x = by.extra, items = [];
+  const s = by.sample, x = by.extra, h = by.holdout, items = [];
   const frac = m => m.must_found + " из " + m.must_total;
   if (!d.model) {
-    items.push("На учебном наборе организаторов Системный AI находит " + frac(s.rules) + " обязательных замечаний и дают " + s.rules.extra_total + " лишних — без модели.");
-    items.push("На собственных примерах, где проблема выражена смыслом, Системный AI находит " + frac(x.rules) + ". Эти случаи Системному AI недоступны по устройству: он сверяет поля и шаблоны, а не смысл.");
-    items.push("Сравнение с моделью появится, когда модель будет подключена и откалибрована.");
+    if (s) items.push("На учебном наборе организаторов Системный AI находит " + frac(s.rules) + " обязательных замечаний и даёт " + s.rules.extra_total + " лишних — без модели.");
+    if (x) items.push("На наборе «Смысловые расхождения» Системный AI находит " + frac(x.rules) + " (лишних: " + x.rules.extra_total + "), а на контрольном наборе — " + (h ? frac(h.rules) + " (лишних: " + h.rules.extra_total + ")" : "—") + ".");
+    items.push("На нестандартных смысловых формулировках вне правил помогает языковая модель — её вклад и сравнение появятся после подключения и калибровки.");
     return items;
   }
   const t = d.seconds_per_vacancy;
-  items.push("Учебный набор: Системный AI находит " + frac(s.rules) + ", модель в одиночку — " + frac(s.llm) + ", вместе — " + frac(s.both) + ". Лишних замечаний: у Системного AI " + s.rules.extra_total + ", у модели " + s.llm.extra_total + ", вместе " + s.both.extra_total + ".");
-  items.push("Собственные примеры: Системный AI находит " + frac(x.rules) + ", модель в одиночку — " + frac(x.llm) + ", вместе — " + frac(x.both) + ". Лишних замечаний: у Системного AI " + x.rules.extra_total + ", у модели " + x.llm.extra_total + ", вместе " + x.both.extra_total + ".");
-  const added = (s.both.must_found - s.rules.must_found) + (x.both.must_found - x.rules.must_found);
-  const cost = (s.both.extra_total - s.rules.extra_total) + (x.both.extra_total - x.rules.extra_total);
+  if (s) items.push("Учебный набор: Системный AI находит " + frac(s.rules) + ", модель в одиночку — " + frac(s.llm) + ", вместе — " + frac(s.both) + ". Лишних замечаний: у Системного AI " + s.rules.extra_total + ", у модели " + s.llm.extra_total + ", вместе " + s.both.extra_total + ".");
+  if (x) items.push("Смысловые расхождения: Системный AI находит " + frac(x.rules) + ", модель в одиночку — " + frac(x.llm) + ", вместе — " + frac(x.both) + ". Лишних замечаний: у Системного AI " + x.rules.extra_total + ", у модели " + x.llm.extra_total + ", вместе " + x.both.extra_total + ".");
+  if (h) items.push("Контрольный набор: Системный AI находит " + frac(h.rules) + ", модель в одиночку — " + frac(h.llm) + ", вместе — " + frac(h.both) + ". Лишних замечаний: у Системного AI " + h.rules.extra_total + ", у модели " + h.llm.extra_total + ", вместе " + h.both.extra_total + ".");
+  const added = d.sets.reduce((acc, st) => acc + (st.modes.both.must_found - st.modes.rules.must_found), 0);
+  const cost = d.sets.reduce((acc, st) => acc + (st.modes.both.extra_total - st.modes.rules.extra_total), 0);
   if (added > 0) items.push("Модель добавила к Системному AI " + added + " " + plural(added, "верное замечание", "верных замечания", "верных замечаний") + " и " + cost + " " + plural(cost, "лишнее", "лишних", "лишних") + ". Её вклад — случаи, где проблема видна только из смысла текста.");
   else items.push("К замечаниям Системного AI модель на этих вакансиях не добавила ни одного верного" + (cost > 0 ? ", но добавила " + cost + " " + plural(cost, "лишнее", "лишних", "лишних") : "") + ".");
-  const alone = s.llm.must_found + x.llm.must_found, rulesAll = s.rules.must_found + x.rules.must_found;
-  items.push("В одиночку модель нашла " + alone + " из " + (s.llm.must_total + x.llm.must_total) + " обязательных замечаний, Системный AI — " + rulesAll + ". " + (alone < rulesAll ? "Заменить Системный AI моделью нельзя: она пропускает то, что Системный AI находит всегда." : "По числу найденного модель не уступает Системному AI, но см. лишние замечания и время."));
+  const alone = d.sets.reduce((acc, st) => acc + st.modes.llm.must_found, 0);
+  const llmTotal = d.sets.reduce((acc, st) => acc + st.modes.llm.must_total, 0);
+  const rulesAll = d.sets.reduce((acc, st) => acc + st.modes.rules.must_found, 0);
+  items.push("В одиночку модель нашла " + alone + " из " + llmTotal + " обязательных замечаний, Системный AI — " + rulesAll + ". " + (alone < rulesAll ? "Заменить Системный AI моделью нельзя: она пропускает то, что Системный AI находит всегда." : "По числу найденного модель не уступает Системному AI, но см. лишние замечания и время."));
   if (t.llm) items.push("Цена: Системный AI тратит на вакансию " + num(t.rules * 1000, 1) + " мс, модель — " + num(t.llm, 1) + " с, то есть примерно в " + num(t.llm / Math.max(t.rules, 1e-6)) + " раз дольше. Тысяча вакансий — это " + num(t.llm * 1000 / 3600, 1) + " ч работы модели против " + num(t.rules * 1000, 1) + " с у Системного AI.");
   return items;
 }
@@ -165,7 +242,7 @@ function render(d, calib) {
       el("td", {class: "n", text: String(r.vacancies)}),
       el("td", {class: "n", text: r.seconds === null || r.seconds === undefined ? "—" : (r.seconds < 1 ? num(r.seconds * 1000, 1) + " мс" : num(r.seconds, 1) + " с")})]));
   out.push(el("section", {class: "box"}, el("h3", {text: "Пять режимов работы"}),
-    el("p", {class: "about", text: "По одной строке на режим. Числа — сумма по всем размеченным наборам. У режима есть показатели, только если модель в нём действительно калибровалась на этом компьютере (или её профиль поставляется с проектом); заочных оценок нет."}),
+    el("p", {class: "about", text: "По одной строке на режим. Числа — сумма по всем размеченным наборам. Один прогон калибровки локальной модели или по API измеряет сразу оба её варианта: совместно с Системным AI и в одиночку; режим без калибровки моделей показателей не имеет."}),
     el("div", {class: "scroll"}, el("table", {}, el("thead", {}, el("tr", {}, el("th", {text: "Режим"}), el("th", {text: "Модель"}), el("th", {class: "n", text: "Найдено обязательных"}), el("th", {class: "n", text: "Лишних"}), el("th", {class: "n", text: "Вакансий"}), el("th", {class: "n", text: "На вакансию"}))), el("tbody", {}, rows5)))));
   out.push(el("section", {class: "box verdict"}, el("h3", {text: "Что показывают числа"}), el("ul", {}, verdict(d).map(t => el("li", {text: t})))));
   for (const st of d.sets) out.push(setTable(st));
@@ -183,12 +260,15 @@ function render(d, calib) {
   const h = window.__verdicts || {rule: 0, llm: 0};
   if (h.rule + h.llm) out.push(el("section", {class: "box"}, el("h3", {text: "Решения редактора при расхождениях"}), el("p", {class: "about", text: "Когда Системный AI и ИИ отвечают по-разному, человек принимает один из ответов кнопкой в отчёте."}),
     el("div", {class: "pair"}, el("div", {}, el("div", {class: "big", text: String(h.rule)}), el("small", {text: "раз принят ответ Системного AI"})), el("div", {}, el("div", {class: "big", text: String(h.llm)}), el("small", {text: "раз принят ответ ИИ"})))));
+  const vacCount = d.vacancies || d.sets.reduce((acc, st) => acc + ((st.modes.rules || {}).vacancies || 0), 0);
+  const vacNote = "Вакансий в проверке немного — " + vacCount + (d.available && vacCount < d.available ? " из " + d.available : "") + " " + plural(vacCount, "штука", "штуки", "штук") + ". Разница в одно-два замечания может быть случайной.";
   out.push(el("section", {class: "box caveats"}, el("h3", {text: "Насколько этим числам можно верить"}), el("ul", {},
-    el("li", {text: "Разметка обоих наборов наша. Эталон жюри нам неизвестен и может отличаться в спорных случаях."}),
-    el("li", {text: "Правила писались с оглядкой на учебный набор, поэтому их результат на нём завышен. Честнее смотреть на собственные примеры — но и они составлены нами."}),
+    el("li", {text: "Разметка наборов наша. Эталон жюри нам неизвестен и может отличаться в спорных случаях."}),
+    el("li", {text: "Правила писались с оглядкой на учебный набор и примеры смысловых расхождений, поэтому их результат на них завышен. Честнее смотреть на контрольный набор — но и его составляли мы сами."}),
     el("li", {text: "Строка «вместе, после калибровки» посчитана на тех же вакансиях, по которым шла калибровка. На новых данных результат будет хуже."}),
-    el("li", {text: "Вакансий мало — тридцать две. Разница в одно-два замечания может быть случайной."}),
+    el("li", {text: vacNote}),
     d.model ? el("li", {text: "Результат относится к модели " + d.model.model + " на этом компьютере. Другая модель покажет другие числа — сервис калибрует её сам."}) : null)));
+  if (window.__meta && window.__meta.strength === "weak") out.push(strengthNote(window.__meta));
   const box = $("out");
   box.replaceChildren(...out);
   box.classList.remove("fade"); void box.offsetWidth; box.classList.add("fade");
