@@ -265,8 +265,9 @@ mark.active { outline: 2px solid var(--accent); }
 .history li { align-items: center; }
 
 /* настройки ИИ, сила модели */
-.settings { display: none; margin: 14px 24px 0; padding: 16px 18px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); }
-.settings.show { display: grid; gap: 12px; animation: drop .3s ease both; }
+.settings { margin: auto; width: min(1040px, calc(100vw - 32px)); max-height: calc(100vh - 40px); overflow: auto; color: var(--ink); padding: 18px 20px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); }
+.settings[open] { display: grid; gap: 12px; animation: drop .25s ease both; }
+.settings::backdrop { background: rgba(10, 20, 20, .55); }
 .settings h3 { margin: 0; font-size: 17px; }
 .modes { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 8px; }
 .mode { display: flex; gap: 9px; align-items: flex-start; border: 1px solid var(--line); border-radius: var(--r); padding: 9px 11px; cursor: pointer; }

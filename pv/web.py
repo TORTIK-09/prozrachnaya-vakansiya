@@ -331,7 +331,7 @@ def create_app(cfg: config_mod.Config | None = None, auto_calibrate: bool = True
         if model is None:
             raise HTTPException(409, "Модель не подключена")
         start_calibration_job(model, plan())
-        return job.status()
+        return with_context(job.status())
 
     @app.get("/api/stats")
     def stats():

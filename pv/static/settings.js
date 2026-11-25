@@ -105,7 +105,7 @@ function renderSettings() {
     setEl("h3", {text: "Настройки ИИ"}),
     d.env_locked ? setEl("div", {class: "strength weak", text: "Модель задана переменными окружения PV_LLM_… — они важнее выбора в этой форме."}) : null,
     modeList, calib, provider,
-    setEl("div", {class: "set-actions"}, setEl("button", {class: "btn primary", id: "setSave", onclick: saveSettings, text: "Сохранить"}), setEl("button", {class: "btn", onclick: toggleSettings, text: "Закрыть"}), setEl("span", {class: "note", id: "setMsg"})));
+    setEl("div", {class: "set-actions"}, setEl("button", {class: "btn primary", id: "setSave", onclick: saveSettings, text: "Сохранить"}), setEl("button", {class: "btn", onclick: recalibrate, disabled: SET.data.mode === "rules_only", title: "Заново проверить подключённую модель на размеченных вакансиях", text: "Перекалибровать ИИ"}), setEl("button", {class: "btn", onclick: () => toggleSettings(false), text: "Закрыть"}), setEl("span", {class: "note", id: "setMsg"})));
   previewPlan();
 }
 
@@ -118,14 +118,48 @@ async function saveSettings() {
     const data = await r.json();
     if (!r.ok) { msg.textContent = data.detail || "Не удалось сохранить"; return; }
     msg.textContent = "Сохранено. " + (data.calibration.state === "running" ? "Началась калибровка ИИ." : data.calibration.state === "no_model" && body.mode_type !== "rules_only" ? "Модель по этому адресу пока не отвечает — сервис будет пробовать снова." : "");
+    seenSettings();
     await loadSettings();
     if (typeof showCalibration === "function") showCalibration(data.calibration);
   } catch (e) { msg.textContent = "Ошибка: " + e.message; }
 }
 
-async function toggleSettings() {
+function seenSettings() { try { localStorage.setItem("pv-settings-seen", "1"); } catch { /* без хранилища */ } }
+
+// Настройки — модальное окно. Закрывается кнопкой, клавишей Esc и щелчком по затемнению.
+async function toggleSettings(force) {
   const box = document.getElementById("settings");
-  SET.open = !SET.open;
-  box.classList.toggle("show", SET.open);
-  if (SET.open) { box.textContent = "Загружаю…"; try { await loadSettings(); renderSettings(); } catch (e) { box.textContent = "Не удалось загрузить настройки: " + e.message; } }
+  if (!box) return;
+  const open = force === undefined ? !box.open : force;
+  if (!open) { if (box.open) box.close(); return; }
+  if (!box.open) box.showModal();
+  box.textContent = "Загружаю…";
+  try { await loadSettings(); renderSettings(); } catch (e) { box.textContent = "Не удалось загрузить настройки: " + e.message; }
+}
+
+// Первый запуск сайта: выбора ещё нет — окно открывается само. Дальше — только по кнопке.
+async function autoOpenSettings() {
+  const box = document.getElementById("settings");
+  if (!box) return;
+  box.addEventListener("close", seenSettings);
+  box.addEventListener("click", e => { if (e.target === box) box.close(); });
+  let seen = false;
+  try { seen = localStorage.getItem("pv-settings-seen") === "1"; } catch { /* без хранилища */ }
+  if (seen) return;
+  try {
+    await loadSettings();
+    if (SET.data.saved && SET.data.saved.mode_type) { seenSettings(); return; }     // выбор уже сделан раньше
+    await toggleSettings(true);
+  } catch { /* настройки необязательны для работы сайта */ }
+}
+
+// Калибровка заново — даже если модель уже знакома сервису.
+async function recalibrate() {
+  const msg = document.getElementById("setMsg");
+  try {
+    const r = await fetch("/api/calibration", {method: "POST"}); const c = await r.json();
+    if (!r.ok) { msg.textContent = c.detail || "Не удалось запустить калибровку"; return; }
+    toggleSettings(false);
+    if (typeof showCalibration === "function") showCalibration(c);
+  } catch (e) { msg.textContent = "Ошибка: " + e.message; }
 }
