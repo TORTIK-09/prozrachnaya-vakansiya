@@ -97,7 +97,7 @@ const pairName = p => (TOPICS[p[0]] || p[0]) + " — " + (KINDS[p[1]] || p[1]);
 function setTable(st) {
   const rows = MODES.filter(([k]) => st.modes[k]).map(([k, name, cls]) => {
     const m = st.modes[k];
-    const act = k === window.__active || (window.__active === "both" && k === "both");
+    const act = k === window.__active;
     return el("tr", {class: act ? "active-mode" : ""},
       el("td", {}, act ? el("span", {class: "on", style: "margin-right:8px", text: "текущий режим"}) : null, el("i", {class: cls, style: "display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:8px"}), name),
       el("td", {}, el("div", {class: "meter"}, el("div", {class: "t"}, el("u", {class: cls, style: "width:" + (m.must_total ? m.must_found / m.must_total * 100 : 0) + "%"})), el("span", {text: m.must_found + " из " + m.must_total}))),
@@ -112,38 +112,45 @@ function setTable(st) {
   return el("section", {class: "box"}, el("h3", {text: st.title + " · " + st.modes.rules.vacancies + " " + plural(st.modes.rules.vacancies, "вакансия", "вакансии", "вакансий")}),
     el("p", {class: "about", text: {sample: "Десять вакансий, выданных организаторами вместе с заданием. Четыре из них понятные: замечаний по ним быть не должно.", extra: "Двенадцать вакансий, которые мы написали сами: поле говорит одно, а свободный текст — другое (пятидневка в поле и скользящий график в тексте, адрес в одном городе и рабочее место в другом). Правила для таких расхождений писались с оглядкой на эти примеры, поэтому результат здесь завышен.", holdout: "Десять вакансий с теми же видами расхождений в других формулировках. Написаны после правил и до их первого прогона на этом наборе; правила по его результатам не правились. Это самая честная из трёх проверок, хотя и её составляли мы сами."}[st.key] || st.about || ""}),
     el("div", {class: "scroll"}, el("table", {}, el("thead", {}, el("tr", {}, el("th", {text: "Способ"}), el("th", {text: "Найдено обязательных замечаний"}), el("th", {class: "n", title: "Доля найденных замечаний, которые есть в разметке", text: "Точность"}), el("th", {class: "n", text: "Лишних"}), el("th", {class: "n", title: "Лишние замечания по вакансиям, где замечаний быть не должно", text: "Лишних на понятных"}))), el("tbody", {}, rows))),
-    agreement(st),
+    agreement(st, window.__mode),
     el("details", {}, el("summary", {text: "Где именно расхождения"}), el("ul", {}, details)));
 }
 
 // Совпадение мнений: что видят оба, что только правила, что только ИИ — и сколько из этого верно.
-function agreement(st) {
+function agreement(st, mode) {
   const a = st.agreement;
   if (!a) return null;
+  const llmOnlyMode = mode === "local_only" || mode === "custom_api_only";
   const row = (name, x, note) => el("tr", {}, el("td", {text: name}), el("td", {class: "n", text: String(x[0])}), el("td", {class: "n" + (x[0] && x[1] === x[0] ? " good" : x[0] && x[1] < x[0] / 2 ? " bad" : ""), text: x[0] ? x[1] + " из " + x[0] : "—"}), el("td", {class: "muted", text: note}));
   return el("div", {class: "scroll", style: "margin-top:14px"}, el("table", {}, el("thead", {}, el("tr", {}, el("th", {text: "Кто видит проблему"}), el("th", {class: "n", text: "Замечаний"}), el("th", {class: "n", text: "Из них верных"}), el("th", {text: "Что с ними делает сервис"}))),
-    el("tbody", {}, row("И Системный AI, и ИИ", a.both, "одно замечание с формулировкой ИИ"), row("Только Системный AI", a.rules_only, "показывается с пометкой, что ИИ не видит"), row("Только ИИ", a.llm_only, "показывается, если этот вид замечаний у модели надёжен"))));
+    el("tbody", {},
+      row("И Системный AI, и ИИ", a.both, llmOnlyMode ? "попадает в отчёт от ИИ (Системный AI в этом режиме отключён)" : "одно замечание с формулировкой ИИ"),
+      row("Только Системный AI", a.rules_only, llmOnlyMode ? "в режиме «Только ИИ» в отчёт не идёт" : "показывается с пометкой, что ИИ не видит"),
+      row("Только ИИ", a.llm_only, "показывается, если этот вид замечаний у модели надёжен"))));
 }
 
 function verdict(d) {
   const by = Object.fromEntries(d.sets.map(s => [s.key, s.modes]));
-  const s = by.sample, x = by.extra, items = [];
+  const s = by.sample, x = by.extra, h = by.holdout, items = [];
   const frac = m => m.must_found + " из " + m.must_total;
   if (!d.model) {
-    items.push("На учебном наборе организаторов Системный AI находит " + frac(s.rules) + " обязательных замечаний и дают " + s.rules.extra_total + " лишних — без модели.");
-    items.push("На собственных примерах, где проблема выражена смыслом, Системный AI находит " + frac(x.rules) + ". Эти случаи Системному AI недоступны по устройству: он сверяет поля и шаблоны, а не смысл.");
-    items.push("Сравнение с моделью появится, когда модель будет подключена и откалибрована.");
+    if (s) items.push("На учебном наборе организаторов Системный AI находит " + frac(s.rules) + " обязательных замечаний и даёт " + s.rules.extra_total + " лишних — без модели.");
+    if (x) items.push("На наборе «Смысловые расхождения» Системный AI находит " + frac(x.rules) + " (лишних: " + x.rules.extra_total + "), а на контрольном наборе — " + (h ? frac(h.rules) + " (лишних: " + h.rules.extra_total + ")" : "—") + ".");
+    items.push("На нестандартных смысловых формулировках вне правил помогает языковая модель — её вклад и сравнение появятся после подключения и калибровки.");
     return items;
   }
   const t = d.seconds_per_vacancy;
-  items.push("Учебный набор: Системный AI находит " + frac(s.rules) + ", модель в одиночку — " + frac(s.llm) + ", вместе — " + frac(s.both) + ". Лишних замечаний: у Системного AI " + s.rules.extra_total + ", у модели " + s.llm.extra_total + ", вместе " + s.both.extra_total + ".");
-  items.push("Собственные примеры: Системный AI находит " + frac(x.rules) + ", модель в одиночку — " + frac(x.llm) + ", вместе — " + frac(x.both) + ". Лишних замечаний: у Системного AI " + x.rules.extra_total + ", у модели " + x.llm.extra_total + ", вместе " + x.both.extra_total + ".");
-  const added = (s.both.must_found - s.rules.must_found) + (x.both.must_found - x.rules.must_found);
-  const cost = (s.both.extra_total - s.rules.extra_total) + (x.both.extra_total - x.rules.extra_total);
+  if (s) items.push("Учебный набор: Системный AI находит " + frac(s.rules) + ", модель в одиночку — " + frac(s.llm) + ", вместе — " + frac(s.both) + ". Лишних замечаний: у Системного AI " + s.rules.extra_total + ", у модели " + s.llm.extra_total + ", вместе " + s.both.extra_total + ".");
+  if (x) items.push("Смысловые расхождения: Системный AI находит " + frac(x.rules) + ", модель в одиночку — " + frac(x.llm) + ", вместе — " + frac(x.both) + ". Лишних замечаний: у Системного AI " + x.rules.extra_total + ", у модели " + x.llm.extra_total + ", вместе " + x.both.extra_total + ".");
+  if (h) items.push("Контрольный набор: Системный AI находит " + frac(h.rules) + ", модель в одиночку — " + frac(h.llm) + ", вместе — " + frac(h.both) + ". Лишних замечаний: у Системного AI " + h.rules.extra_total + ", у модели " + h.llm.extra_total + ", вместе " + h.both.extra_total + ".");
+  const added = d.sets.reduce((acc, st) => acc + (st.modes.both.must_found - st.modes.rules.must_found), 0);
+  const cost = d.sets.reduce((acc, st) => acc + (st.modes.both.extra_total - st.modes.rules.extra_total), 0);
   if (added > 0) items.push("Модель добавила к Системному AI " + added + " " + plural(added, "верное замечание", "верных замечания", "верных замечаний") + " и " + cost + " " + plural(cost, "лишнее", "лишних", "лишних") + ". Её вклад — случаи, где проблема видна только из смысла текста.");
   else items.push("К замечаниям Системного AI модель на этих вакансиях не добавила ни одного верного" + (cost > 0 ? ", но добавила " + cost + " " + plural(cost, "лишнее", "лишних", "лишних") : "") + ".");
-  const alone = s.llm.must_found + x.llm.must_found, rulesAll = s.rules.must_found + x.rules.must_found;
-  items.push("В одиночку модель нашла " + alone + " из " + (s.llm.must_total + x.llm.must_total) + " обязательных замечаний, Системный AI — " + rulesAll + ". " + (alone < rulesAll ? "Заменить Системный AI моделью нельзя: она пропускает то, что Системный AI находит всегда." : "По числу найденного модель не уступает Системному AI, но см. лишние замечания и время."));
+  const alone = d.sets.reduce((acc, st) => acc + st.modes.llm.must_found, 0);
+  const llmTotal = d.sets.reduce((acc, st) => acc + st.modes.llm.must_total, 0);
+  const rulesAll = d.sets.reduce((acc, st) => acc + st.modes.rules.must_found, 0);
+  items.push("В одиночку модель нашла " + alone + " из " + llmTotal + " обязательных замечаний, Системный AI — " + rulesAll + ". " + (alone < rulesAll ? "Заменить Системный AI моделью нельзя: она пропускает то, что Системный AI находит всегда." : "По числу найденного модель не уступает Системному AI, но см. лишние замечания и время."));
   if (t.llm) items.push("Цена: Системный AI тратит на вакансию " + num(t.rules * 1000, 1) + " мс, модель — " + num(t.llm, 1) + " с, то есть примерно в " + num(t.llm / Math.max(t.rules, 1e-6)) + " раз дольше. Тысяча вакансий — это " + num(t.llm * 1000 / 3600, 1) + " ч работы модели против " + num(t.rules * 1000, 1) + " с у Системного AI.");
   return items;
 }
@@ -165,7 +172,7 @@ function render(d, calib) {
       el("td", {class: "n", text: String(r.vacancies)}),
       el("td", {class: "n", text: r.seconds === null || r.seconds === undefined ? "—" : (r.seconds < 1 ? num(r.seconds * 1000, 1) + " мс" : num(r.seconds, 1) + " с")})]));
   out.push(el("section", {class: "box"}, el("h3", {text: "Пять режимов работы"}),
-    el("p", {class: "about", text: "По одной строке на режим. Числа — сумма по всем размеченным наборам. У режима есть показатели, только если модель в нём действительно калибровалась на этом компьютере (или её профиль поставляется с проектом); заочных оценок нет."}),
+    el("p", {class: "about", text: "По одной строке на режим. Числа — сумма по всем размеченным наборам. Один прогон калибровки локальной модели или по API измеряет сразу оба её варианта: совместно с Системным AI и в одиночку; режим без калибровки моделей показателей не имеет."}),
     el("div", {class: "scroll"}, el("table", {}, el("thead", {}, el("tr", {}, el("th", {text: "Режим"}), el("th", {text: "Модель"}), el("th", {class: "n", text: "Найдено обязательных"}), el("th", {class: "n", text: "Лишних"}), el("th", {class: "n", text: "Вакансий"}), el("th", {class: "n", text: "На вакансию"}))), el("tbody", {}, rows5)))));
   out.push(el("section", {class: "box verdict"}, el("h3", {text: "Что показывают числа"}), el("ul", {}, verdict(d).map(t => el("li", {text: t})))));
   for (const st of d.sets) out.push(setTable(st));
@@ -183,12 +190,15 @@ function render(d, calib) {
   const h = window.__verdicts || {rule: 0, llm: 0};
   if (h.rule + h.llm) out.push(el("section", {class: "box"}, el("h3", {text: "Решения редактора при расхождениях"}), el("p", {class: "about", text: "Когда Системный AI и ИИ отвечают по-разному, человек принимает один из ответов кнопкой в отчёте."}),
     el("div", {class: "pair"}, el("div", {}, el("div", {class: "big", text: String(h.rule)}), el("small", {text: "раз принят ответ Системного AI"})), el("div", {}, el("div", {class: "big", text: String(h.llm)}), el("small", {text: "раз принят ответ ИИ"})))));
+  const vacCount = d.vacancies || d.sets.reduce((acc, st) => acc + ((st.modes.rules || {}).vacancies || 0), 0);
+  const vacNote = "Вакансий в проверке немного — " + vacCount + (d.available && vacCount < d.available ? " из " + d.available : "") + " " + plural(vacCount, "штука", "штуки", "штук") + ". Разница в одно-два замечания может быть случайной.";
   out.push(el("section", {class: "box caveats"}, el("h3", {text: "Насколько этим числам можно верить"}), el("ul", {},
-    el("li", {text: "Разметка обоих наборов наша. Эталон жюри нам неизвестен и может отличаться в спорных случаях."}),
-    el("li", {text: "Правила писались с оглядкой на учебный набор, поэтому их результат на нём завышен. Честнее смотреть на собственные примеры — но и они составлены нами."}),
+    el("li", {text: "Разметка наборов наша. Эталон жюри нам неизвестен и может отличаться в спорных случаях."}),
+    el("li", {text: "Правила писались с оглядкой на учебный набор и примеры смысловых расхождений, поэтому их результат на них завышен. Честнее смотреть на контрольный набор — но и его составляли мы сами."}),
     el("li", {text: "Строка «вместе, после калибровки» посчитана на тех же вакансиях, по которым шла калибровка. На новых данных результат будет хуже."}),
-    el("li", {text: "Вакансий мало — тридцать две. Разница в одно-два замечания может быть случайной."}),
+    el("li", {text: vacNote}),
     d.model ? el("li", {text: "Результат относится к модели " + d.model.model + " на этом компьютере. Другая модель покажет другие числа — сервис калибрует её сам."}) : null)));
+  if (window.__meta && window.__meta.strength === "weak") out.push(strengthNote(window.__meta));
   const box = $("out");
   box.replaceChildren(...out);
   box.classList.remove("fade"); void box.offsetWidth; box.classList.add("fade");

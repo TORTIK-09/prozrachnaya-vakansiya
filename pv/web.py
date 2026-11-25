@@ -143,7 +143,10 @@ def create_app(cfg: config_mod.Config | None = None, auto_calibrate: bool = True
                 row = {"mode": mode_name, "model": prof["model"].get("model") if prof else None}
                 if prof:
                     row.update(total(prof["sets"], key) or {})
-                    row["seconds"] = (prof.get("seconds_per_vacancy") or {}).get("llm")
+                    spv = prof.get("seconds_per_vacancy") or {}
+                    llm_s = spv.get("llm")
+                    rules_s = spv.get("rules") or 0.0
+                    row["seconds"] = round(llm_s + rules_s, 1) if (llm_s is not None and key == "both") else llm_s
                     row["calibrated_at"] = prof.get("calibrated_at")
                 out.append(row)
         return out
