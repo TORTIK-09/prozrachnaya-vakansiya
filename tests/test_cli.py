@@ -107,3 +107,14 @@ def test_cron():
     for bad in ("0 6 * *", "61 * * * *", "a * * * *", "*/0 * * * *", "5-1 * * * *", "0 0 31 2 *"):
         with pytest.raises(ValueError):
             cron.next_run(bad, t)
+
+
+def test_local_model_gets_one_vacancy_at_a_time(tmp_path):
+    class M:
+        def __init__(self, info): self.info = info
+        def describe(self): return self.info
+    c = cfg(tmp_path, workers=4)
+    assert cli.workers_for(c, None) == 4
+    assert cli.workers_for(c, M({"provider": "ollama", "model": "m"})) == 1
+    assert cli.workers_for(c, M({"provider": "x", "model": "m", "mode_type": "local_only"})) == 1
+    assert cli.workers_for(c, M({"provider": "api.example", "model": "m", "mode_type": "custom_api"})) == 4

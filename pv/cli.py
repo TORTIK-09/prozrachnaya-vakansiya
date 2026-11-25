@@ -52,6 +52,23 @@ def make_llm(cfg: config_mod.Config, enabled: bool) -> LLM | None:
     return client
 
 
+def workers_for(cfg: config_mod.Config, llm: LLM | None) -> int:
+    """Сколько вакансий разбирать одновременно.
+
+    Локальная модель отвечает на один запрос за раз. Если слать ей несколько сразу, они делят процессор, идут
+    в несколько раз медленнее и заканчиваются одновременно: вакансии появляются не по одной, а все разом в конце,
+    а на слабом компьютере сервер модели может зависнуть. Поэтому с локальной моделью — строго по одной.
+    """
+    if llm is None:
+        return cfg.workers
+    try:
+        info = llm.describe() or {}
+    except Exception:
+        info = {}
+    local = str(info.get("mode_type") or "").startswith("local") or info.get("provider") in ("ollama", "local")
+    return 1 if local else cfg.workers
+
+
 def _salt(version: str, llm: LLM | None) -> str:
     if llm is None:
         return f"{version}|no-llm"
@@ -92,7 +109,7 @@ def cmd_run(cfg: config_mod.Config, use_llm: bool = True, on_log=None, on_entry=
     analyze, version = get_analyzer()
     llm = make_llm(cfg, use_llm)
     cache = report.Cache(cfg.reports / "cache.json")
-    entries, stats = report.analyze_all(raw, analyze, llm, cfg.workers, cache, _salt(version, llm), log, on_entry)
+    entries, stats = report.analyze_all(raw, analyze, llm, workers_for(cfg, llm), cache, _salt(version, llm), log, on_entry)
     rep = report.build(entries, stats, "api", cfg.source_url, llm)
     _summary(rep, report.save_latest(rep, cfg.reports))
     return 0
@@ -108,7 +125,7 @@ def cmd_check(cfg: config_mod.Config, file: str, out: str, use_llm: bool = True,
     analyze, version = get_analyzer()
     llm = make_llm(cfg, use_llm)
     cache = report.Cache(cfg.reports / "cache-check.json") if use_cache else None
-    entries, stats = report.analyze_all(raw, analyze, llm, cfg.workers, cache, _salt(version, llm), log)
+    entries, stats = report.analyze_all(raw, analyze, llm, workers_for(cfg, llm), cache, _salt(version, llm), log)
     rep = report.build(entries, stats, "file", Path(file).name, llm)
     out_path = Path(out)
     report.write_json(out_path, rep)

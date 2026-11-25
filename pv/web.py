@@ -380,7 +380,7 @@ def create_app(cfg: config_mod.Config | None = None, auto_calibrate: bool = True
         def fn(on_entry, on_log):
             analyzer, _ = cli.get_analyzer()
             model = llm()
-            entries, stats = report.analyze_all(raw, analyzer, model, cfg.workers, None, "", cli.log, on_entry)
+            entries, stats = report.analyze_all(raw, analyzer, model, cli.workers_for(cfg, model), None, "", cli.log, on_entry)
             rep = report.build(entries, stats, "file", src, model)
             report.write_json(cfg.reports / "check.json", rep)
             if src == SAMPLE.name:
